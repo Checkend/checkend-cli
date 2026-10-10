@@ -125,11 +125,27 @@ describe("ce issue list", () => {
 		const request = api.requests.at(-1);
 		expect(request?.path).toBe("/v1/issues");
 		expect(Object.fromEntries(request?.query ?? [])).toEqual({
-			project: String(app.id),
+			project: "app",
 			status: "unresolved",
 			limit: "1",
 		});
 		expect(JSON.parse(result.stdout).next_cursor).toBe("1");
+	});
+
+	it("passes a slug or a public ID to the server without a project lookup", async () => {
+		for (const [ref, sent] of [
+			["app", "app"],
+			["APP", "app"],
+			[String(web.id), String(web.id)],
+		]) {
+			api.requests = [];
+			const result = await cli.run(["issue", "list", "--project", ref ?? ""], { env });
+			expect(result.code).toBe(0);
+			expect(api.requests.map((r) => r.path)).toEqual(["/v1/issues"]);
+			expect(api.requests[0]?.query.get("project")).toBe(sent);
+			const expected = sent === "app" ? app.id : web.id;
+			for (const issue of JSON.parse(result.stdout).data) expect(issue.project_id).toBe(expected);
+		}
 	});
 
 	it("uses --project before .checkend.json and accepts a public ID", async () => {
@@ -145,9 +161,10 @@ describe("ce issue list", () => {
 		expect(JSON.parse(next.stdout).data.map((i: Json) => i.id)).toEqual([1]);
 	});
 
-	it("exits 3 for an unknown project", async () => {
-		const result = await cli.run(["issue", "list", "--project", "nope"], { env });
-		expect(result.code).toBe(3);
+	it("lists no issues for an unknown project, as the server does", async () => {
+		const result = await cli.run(["issue", "list", "--project", "nope"], { env, tty: true });
+		expect(result.code).toBe(0);
+		expect(result.stdout).toContain("No issues.");
 	});
 
 	it("exits 2 when the server rejects a filter", async () => {
@@ -350,10 +367,24 @@ describe("ce next", () => {
 		api.addIssue({ project_id: app.id });
 		writeFileSync(join(cli.repo, ".checkend.json"), JSON.stringify({ project: String(web.id) }));
 		const result = await cli.run(["next"], { env });
+		expect(api.requests.map((r) => r.path)).toEqual(["/v1/issues"]);
 		expect(api.requests.find((r) => r.path === "/v1/issues")?.query.get("project")).toBe(
 			String(web.id),
 		);
 		expect(JSON.parse(result.stdout)).toEqual({ data: null });
+	});
+
+	it("passes a slug from --project to the server", async () => {
+		api.addIssue({ project_id: app.id, title: "Error: in app" });
+		api.addIssue({
+			project_id: web.id,
+			title: "Error: in web",
+			last_seen: "2026-10-10T11:59:00.000Z",
+		});
+		const result = await cli.run(["next", "--project", "App"], { env });
+		expect(api.requests.find((r) => r.path === "/v1/issues")?.query.get("project")).toBe("app");
+		expect(api.requests.some((r) => r.path === "/v1/projects")).toBe(false);
+		expect(JSON.parse(result.stdout).data.title).toBe("Error: in app");
 	});
 
 	it("says when there is nothing to do", async () => {

@@ -93,6 +93,14 @@ export class Session {
 		return this.string("project") ?? this.link()?.project;
 	}
 
+	/**
+	 * The project for a `?project=` filter. The server takes the public ID or the slug
+	 * (lowercase), so no lookup is needed. An unknown project gives an empty list.
+	 */
+	projectFilter(): string | undefined {
+		return this.projectRef()?.trim().toLowerCase() || undefined;
+	}
+
 	/** Finds a project by public ID or slug. */
 	async project(api: Api, ref: string): Promise<Project> {
 		const { data } = await api.get<{ data: Project[] }>("/v1/projects");

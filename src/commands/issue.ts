@@ -32,12 +32,11 @@ const list: Command = {
 	async run(session) {
 		const { out } = session;
 		const api = session.api();
-		const ref = session.projectRef();
-		const project = ref ? await session.project(api, ref) : undefined;
+		const project = session.projectFilter();
 		const status = session.string("status");
 		const limit = session.string("limit");
 		const page = await api.get<IssuePage>("/v1/issues", {
-			project: project ? String(project.id) : undefined,
+			project,
 			status,
 			limit,
 			cursor: session.string("cursor"),
@@ -53,7 +52,7 @@ const list: Command = {
 			if (!p.next_cursor || !CURSOR.test(p.next_cursor)) return table;
 			const args = [
 				status && `--status ${status}`,
-				ref && session.string("project") && `--project ${project?.slug}`,
+				session.string("project") && `--project ${project}`,
 				limit && `--limit ${limit}`,
 			].filter(Boolean);
 			return `${table}\n\nMore: ce issue list ${[...args, `--cursor ${p.next_cursor}`].join(" ")}`;
@@ -103,10 +102,8 @@ const next: Command = {
 	options: { project: { type: "string" } },
 	async run(session) {
 		const api = session.api();
-		const ref = session.projectRef();
-		const project = ref ? await session.project(api, ref) : undefined;
 		const page = await api.get<IssuePage>("/v1/issues", {
-			project: project ? String(project.id) : undefined,
+			project: session.projectFilter(),
 			status: "unresolved",
 			limit: "1",
 		});

@@ -170,8 +170,20 @@ export class FakeApi {
 			let issues = [...this.issues].sort((a, b) =>
 				String(b.last_seen).localeCompare(String(a.last_seen)),
 			);
+			// The project filter takes the public ID or the slug (lowercase).
 			const project = query.get("project");
-			if (project) issues = issues.filter((i) => String(i.project_id) === project);
+			if (project !== null && !/^[a-z0-9][a-z0-9-]{0,47}$/.test(project)) {
+				return {
+					status: 400,
+					body: { error: "invalid_request", details: [{ path: "project", message: "Invalid" }] },
+				};
+			}
+			if (project) {
+				const ids = this.projects
+					.filter((p) => String(p.id) === project || p.slug === project)
+					.map((p) => p.id);
+				issues = issues.filter((i) => ids.includes(i.project_id as number));
+			}
 			const status = query.get("status");
 			if (status) issues = issues.filter((i) => i.status === status);
 			const limit = Number(query.get("limit") ?? 25);
