@@ -19,7 +19,16 @@ describe("help and version", () => {
 	it("prints the help with only the commands that exist now", async () => {
 		const result = await cli.run(["--help"]);
 		expect(result.code).toBe(0);
-		for (const command of ["login", "logout", "status", "init", "project"]) {
+		for (const command of [
+			"login",
+			"logout",
+			"status",
+			"init",
+			"next",
+			"issue",
+			"event",
+			"project",
+		]) {
 			expect(result.stdout).toContain(command);
 		}
 		for (const later of [
@@ -51,6 +60,13 @@ describe("help and version", () => {
 		expect(api.requests).toEqual([]);
 	});
 
+	it("prints help for the issue group", async () => {
+		const result = await cli.run(["issue", "--help"]);
+		expect(result.code).toBe(0);
+		expect(result.stdout).toContain("ce issue list");
+		expect(result.stdout).toContain("ce issue view <id>");
+	});
+
 	it("prints the version", async () => {
 		const result = await cli.run(["--version"]);
 		expect(result.code).toBe(0);
@@ -68,6 +84,15 @@ describe("usage errors: a typo never does anything", () => {
 		["project", "list", "extra"],
 		["project", "dsn", "a", "b"],
 		["init", "--project"],
+		["issue", "frob"],
+		["issue"],
+		["issue", "list", "--bogus"],
+		["issue", "list", "extra"],
+		["issue", "view"],
+		["issue", "view", "abc"],
+		["issue", "view", "1", "2"],
+		["event", "view", "1.5"],
+		["next", "1"],
 		["status", "extra"],
 		["project", "create"],
 		["login", "--url"],

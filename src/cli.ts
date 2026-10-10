@@ -1,7 +1,9 @@
 import { type ParseArgsOptionsConfig, parseArgs } from "node:util";
 import { type Command, Session, type Values } from "./command.ts";
 import { authCommands } from "./commands/auth.ts";
+import { eventCommands } from "./commands/event.ts";
 import { init } from "./commands/init.ts";
+import { issueCommands, nextCommand } from "./commands/issue.ts";
 import { projectCommands } from "./commands/project.ts";
 import type { Context } from "./context.ts";
 import { CliError, EXIT, usageError } from "./errors.ts";
@@ -17,9 +19,18 @@ const GLOBAL_OPTIONS: ParseArgsOptionsConfig = {
 };
 
 // Only commands whose server API exists are listed here (and so in --help).
-const COMMANDS: Command[] = [...authCommands, init, ...projectCommands];
+const COMMANDS: Command[] = [
+	...authCommands,
+	init,
+	nextCommand,
+	...issueCommands,
+	...eventCommands,
+	...projectCommands,
+];
 
 const GROUPS: Record<string, string> = {
+	issue: "List and view issues",
+	event: "View an event",
 	project: "Create and list projects; print a DSN",
 };
 
