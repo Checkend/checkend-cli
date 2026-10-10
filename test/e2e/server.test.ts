@@ -85,6 +85,11 @@ describe.skipIf(!url || !token)("against a real Checkend server", () => {
 		expect(event.stdout).toContain("runE2e (src/e2e.ts:7:3)");
 		expect(event.stdout).toMatch(/suite\s+cli-e2e/);
 
+		// An unknown project exits 3 (the server answers 404 project_not_found).
+		const unknown = await cli.run(["issue", "list", "--project", "nope"]);
+		expect(unknown.code, unknown.stderr).toBe(3);
+		expect(JSON.parse(unknown.stderr).error).toBe('Project "nope" not found.');
+
 		// An unknown command does nothing, even with a real server.
 		const typo = await cli.run(["isue", "list"]);
 		expect(typo.code).toBe(2);
