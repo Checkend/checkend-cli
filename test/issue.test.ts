@@ -161,10 +161,14 @@ describe("ce issue list", () => {
 		expect(JSON.parse(next.stdout).data.map((i: Json) => i.id)).toEqual([1]);
 	});
 
-	it("lists no issues for an unknown project, as the server does", async () => {
-		const result = await cli.run(["issue", "list", "--project", "nope"], { env, tty: true });
-		expect(result.code).toBe(0);
-		expect(result.stdout).toContain("No issues.");
+	it("exits 3 for an unknown project", async () => {
+		const result = await cli.run(["issue", "list", "--project", "nope"], { env });
+		expect(result.code).toBe(3);
+		expect(JSON.parse(result.stderr)).toEqual({
+			error: 'Project "nope" not found.',
+			hint: "Run `ce project list` to see the projects.",
+		});
+		expect(api.requests.map((r) => r.path)).toEqual(["/v1/issues"]);
 	});
 
 	it("exits 2 when the server rejects a filter", async () => {
@@ -385,6 +389,16 @@ describe("ce next", () => {
 		expect(api.requests.find((r) => r.path === "/v1/issues")?.query.get("project")).toBe("app");
 		expect(api.requests.some((r) => r.path === "/v1/projects")).toBe(false);
 		expect(JSON.parse(result.stdout).data.title).toBe("Error: in app");
+	});
+
+	it("exits 3 for an unknown project", async () => {
+		writeFileSync(join(cli.repo, ".checkend.json"), JSON.stringify({ project: "gone" }));
+		const result = await cli.run(["next"], { env });
+		expect(result.code).toBe(3);
+		expect(JSON.parse(result.stderr)).toEqual({
+			error: 'Project "gone" not found.',
+			hint: "Run `ce project list` to see the projects.",
+		});
 	});
 
 	it("says when there is nothing to do", async () => {

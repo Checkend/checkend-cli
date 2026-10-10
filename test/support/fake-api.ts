@@ -182,6 +182,7 @@ export class FakeApi {
 				const ids = this.projects
 					.filter((p) => String(p.id) === project || p.slug === project)
 					.map((p) => p.id);
+				if (ids.length === 0) return { status: 404, body: { error: "project_not_found" } };
 				issues = issues.filter((i) => ids.includes(i.project_id as number));
 			}
 			const status = query.get("status");

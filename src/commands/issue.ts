@@ -1,4 +1,4 @@
-import { orNotFound } from "../api.ts";
+import { type Api, orNotFound } from "../api.ts";
 import { type Command, parseId, type Session } from "../command.ts";
 import { CliError, EXIT } from "../errors.ts";
 import { ago } from "../output.ts";
@@ -35,7 +35,7 @@ const list: Command = {
 		const project = session.projectFilter();
 		const status = session.string("status");
 		const limit = session.string("limit");
-		const page = await api.get<IssuePage>("/v1/issues", {
+		const page = await listIssues(session, api, {
 			project,
 			status,
 			limit,
@@ -102,7 +102,7 @@ const next: Command = {
 	options: { project: { type: "string" } },
 	async run(session) {
 		const api = session.api();
-		const page = await api.get<IssuePage>("/v1/issues", {
+		const page = await listIssues(session, api, {
 			project: session.projectFilter(),
 			status: "unresolved",
 			limit: "1",
@@ -123,6 +123,15 @@ const next: Command = {
 		return EXIT.ok;
 	},
 };
+
+/** GET /v1/issues. The server answers 404 project_not_found for an unknown ?project=. */
+function listIssues(session: Session, api: Api, query: Record<string, string | undefined>) {
+	return orNotFound(
+		api.get<IssuePage>("/v1/issues", query),
+		`Project "${session.projectRef()?.trim()}" not found.`,
+		"Run `ce project list` to see the projects.",
+	);
+}
 
 function card(session: Session, issue: Issue, commands: [string, string, boolean][]): string {
 	const { out } = session;
