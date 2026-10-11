@@ -162,13 +162,15 @@ func setupCommand() *Command {
 
 			var r setupResult
 			r.URL, r.Project, r.Created, r.DSN, r.Stack, r.File = url, project, jv.Get(data, "created") == true, checked, stack, file
-			saved, err := config.SavedToken(h, url)
+			// A dedicated agent token for each app, never the login of a person: an agent with
+			// an admin token over MCP would get admin power.
+			saved, err := config.AgentToken(h, url, ref)
 			if err != nil {
 				return err
 			}
 			if saved != "" {
 				s.Out.Hide(saved)
-				r.Token.Storage = "saved"
+				r.Token.Storage = config.AgentStorage(h, url, ref)
 			} else {
 				raw, err := client.Post("/v1/setup/tokens", map[string]string{"name": agentName(s) + " (ce setup)", "project": ref})
 				if err != nil {
@@ -180,7 +182,7 @@ func setupCommand() *Command {
 				if token == "" {
 					return clierr.Fail("The server did not return a token.")
 				}
-				if r.Token.Storage, err = config.SaveToken(h, url, token); err != nil {
+				if r.Token.Storage, err = config.SaveAgentToken(h, url, ref, token); err != nil {
 					return err
 				}
 				r.Token.Created = true
@@ -225,13 +227,14 @@ func renderSetup(d any) string {
 	if sdk := jv.Str(jv.Get(stack, "sdk")); sdk != "" {
 		lines = append(lines, "Sentry SDK: "+sdk)
 	}
-	switch jv.Str(jv.Get(d, "token", "storage")) {
-	case "saved":
-		lines = append(lines, "Kept the saved token of "+jv.Str(jv.Get(d, "url"))+".")
-	case config.StorageKeychain:
-		lines = append(lines, "Saved an agent token in the OS keychain.")
-	default:
-		lines = append(lines, "Saved an agent token in "+jv.Str(jv.Get(d, "token", "storage"))+" (mode 600).")
+	verb, storage := "Saved an agent token", jv.Str(jv.Get(d, "token", "storage"))
+	if jv.Get(d, "token", "created") != true {
+		verb = "Kept the agent token of this app"
+	}
+	if storage == config.StorageKeychain {
+		lines = append(lines, verb+" in the OS keychain.")
+	} else {
+		lines = append(lines, verb+" in "+storage+" (mode 600).")
 	}
 	if jv.Str(jv.Get(d, "test_event")) == "sent" {
 		lines = append(lines, "Sent a test event.")
@@ -281,13 +284,20 @@ func setupReportCommand() *Command {
 			if ref == "" {
 				return clierr.UsageError("No project given and no .checkend.json found.", "Run `ce setup` first, or give --project.")
 			}
-			var client *api.Client
-			if key != "" {
-				url, err := s.URL()
-				if err != nil {
+			url, err := s.URL()
+			if err != nil {
+				return err
+			}
+			token := key
+			if token == "" {
+				if token, err = config.AgentToken(s.Host, url, ref); err != nil {
 					return err
 				}
-				client = api.New(s.Host, url, key)
+				s.Out.Hide(token)
+			}
+			var client *api.Client
+			if token != "" {
+				client = api.New(s.Host, url, token)
 			} else if client, err = s.API(); err != nil {
 				return err
 			}

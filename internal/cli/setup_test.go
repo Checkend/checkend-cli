@@ -45,7 +45,7 @@ func TestSetupRegistersTheAppStoresTheTokenAndSendsATestEvent(t *testing.T) {
 	Contains(t, out["steps"].(string), "Install the official Sentry SDK")
 	Equal(t, readLink(t, cli), J{"project": id(p), "slug": "repo"})
 
-	if cli.Keyring.Secrets[api.URL] != api.Tokens[0] {
+	if cli.Keyring.Secrets[api.URL+"#agent:"+id(p)] != api.Tokens[0] || cli.Keyring.Secrets[api.URL] != "" {
 		t.Errorf("keychain: %#v", cli.Keyring.Secrets)
 	}
 	NotContains(t, r.All, api.SetupKey)
@@ -86,21 +86,26 @@ func TestSetupUsesTheNameAndPlatformFlags(t *testing.T) {
 	Equal(t, api.Requests()[1].Body, J{"name": "Shop API", "platform": "python-django"})
 }
 
-func TestSetupKeepsASavedTokenOfTheInstance(t *testing.T) {
+func TestSetupMakesAnAgentTokenEvenWithAnAdminLogin(t *testing.T) {
 	api, cli, _ := setup(t)
 	login(t, cli, api)
 	api.Reset()
 	r := cli.Run(setupArgs(api), Options{TTY: true})
 	Code(t, r, 0)
-	for _, p := range api.Paths() {
-		if p == "POST /v1/setup/tokens" {
-			t.Error("made a new token")
-		}
+	Contains(t, api.Paths()[2], "POST /v1/setup/tokens")
+	Contains(t, r.Stdout, "Saved an agent token in the OS keychain")
+	p := id(api.Projects[0])
+	if cli.Keyring.Secrets[api.URL] != api.Token || cli.Keyring.Secrets[api.URL+"#agent:"+p] != api.Tokens[0] {
+		t.Errorf("keychain: %#v", cli.Keyring.Secrets)
 	}
-	Contains(t, r.Stdout, "Kept the saved token")
-	if cli.Keyring.Secrets[api.URL] != api.Token {
-		t.Error("the saved token changed")
-	}
+	// ce mcp sends the agent token, never the admin login.
+	api.Reset()
+	Code(t, cli.Run([]string{"mcp", "--url", api.URL}, Options{Stdin: `{"jsonrpc":"2.0","id":1,"method":"ping"}` + "\n"}), 0)
+	Equal(t, api.Last().Authorization, "Bearer "+api.Tokens[0])
+	// The other commands still use the login.
+	api.Reset()
+	Code(t, cli.Run([]string{"project", "list"}), 0)
+	Equal(t, api.Last().Authorization, "Bearer "+api.Token)
 }
 
 func TestSetupAgainWithTheSameKeyKeepsTheApp(t *testing.T) {
@@ -111,8 +116,9 @@ func TestSetupAgainWithTheSameKeyKeepsTheApp(t *testing.T) {
 	out := r.JSON(t)
 	Equal(t, out["created"], false)
 	Equal(t, out["test_event"], "already_sent")
-	if len(api.Projects) != 1 {
-		t.Errorf("%d projects", len(api.Projects))
+	Equal(t, out["token"], J{"created": false, "storage": "keychain"})
+	if len(api.Projects) != 1 || len(api.Tokens) != 1 {
+		t.Errorf("%d projects, %d tokens", len(api.Projects), len(api.Tokens))
 	}
 }
 
@@ -212,9 +218,24 @@ func TestSetupReportSendsAStep(t *testing.T) {
 	NotContains(t, r.All, api.SetupKey)
 }
 
+func TestSetupReportUsesTheAgentTokenOfTheApp(t *testing.T) {
+	api, cli, _ := setup(t)
+	Code(t, cli.Run(setupArgs(api)), 0)
+	r := cli.Run([]string{"setup", "report", "sdk_installed"})
+	Code(t, r, 0)
+	Equal(t, api.Last().Authorization, "Bearer "+api.Tokens[0])
+	Equal(t, api.Reports, []string{id(api.Projects[0]) + " sdk_installed"})
+}
+
 func TestSetupReportExplainsAForbiddenToken(t *testing.T) {
 	api, cli, _ := setup(t)
 	Code(t, cli.Run(setupArgs(api)), 0)
+	api.Override = func(r *Request) *Reply {
+		if strings.HasSuffix(r.Path, "/report") {
+			return &Reply{Status: 403, Body: J{"error": "forbidden"}}
+		}
+		return nil
+	}
 	r := cli.Run([]string{"setup", "report", "sdk_installed"})
 	Code(t, r, 5)
 	Contains(t, r.ErrJSON(t)["hint"].(string), "--key")

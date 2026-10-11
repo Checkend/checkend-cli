@@ -11,6 +11,8 @@ const (
 	NotFound = 3
 	Conflict = 4
 	Auth     = 5
+	// Pending: the server accepted the request, and it waits for an approval.
+	Pending = 6
 )
 
 // Error is an error with an exit code and an optional next step for the user.

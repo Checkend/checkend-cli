@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/Checkend/checkend-cli/internal/api"
+	"github.com/Checkend/checkend-cli/internal/clierr"
 )
 
 // maxMessage limits one JSON-RPC message from the agent.
@@ -23,14 +24,27 @@ func mcpCommand() *Command {
 			"  --url <url>  The Checkend instance (default: the instance of `ce login` or `ce setup`)",
 			"",
 			"A stdio MCP server for agents: it sends each JSON-RPC message to <url>/mcp with the",
-			"saved token. Add it to an agent, for example:",
+			"agent token of `ce setup` (or CHECKEND_AGENT_TOKEN), never the login of a person.",
+			"Add it to an agent, for example:",
 			"  claude mcp add checkend -- ce mcp --url <url>",
 		},
 		Run: func(s *Session) error {
-			client, err := s.API()
+			if s.Has("token") {
+				return clierr.UsageError("ce mcp uses only the agent token of `ce setup`, not --token.", "Set CHECKEND_AGENT_TOKEN, or run `ce setup`.")
+			}
+			url, err := s.URL()
 			if err != nil {
 				return err
 			}
+			token, err := s.AgentToken(url)
+			if err != nil {
+				return err
+			}
+			if token == "" {
+				return clierr.New(clierr.Auth, fmt.Sprintf("No agent token for %s.", url),
+					fmt.Sprintf("Run `ce setup --url %s --key <cks_…>` in the repo of the app.", url))
+			}
+			client := api.New(s.Host, url, token)
 			reader := bufio.NewReaderSize(s.Host.Stdin, 64<<10)
 			warned := false
 			for {
@@ -94,7 +108,7 @@ func forward(s *Session, client *api.Client, line []byte, warned bool) bool {
 	case status == 401 || status == 403:
 		write(rpcError(head.ID, -32001, fmt.Sprintf("%s rejected the token.", client.URL)))
 		if !warned {
-			s.Out.Notice(fmt.Sprintf("ce mcp: %s rejected the token. Run `ce login --url %s`.", client.URL, client.URL))
+			s.Out.Notice(fmt.Sprintf("ce mcp: %s rejected the agent token. Run `ce setup --url %s --key <cks_…>` again.", client.URL, client.URL))
 			warned = true
 		}
 	case status < 200 || status >= 300:

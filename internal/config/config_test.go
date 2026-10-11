@@ -182,3 +182,69 @@ func TestFindLinkStopsAtTheRepoRoot(t *testing.T) {
 		t.Errorf("FindRepoRoot = %q", root)
 	}
 }
+
+func TestAgentTokensAreSeparateFromTheLogin(t *testing.T) {
+	h, keys := newHost(t)
+	_, _ = SaveToken(h, "https://a.example", "human")
+	where, err := SaveAgentToken(h, "https://a.example", "4817305926", "agent-1")
+	if err != nil || where != StorageKeychain {
+		t.Fatalf("SaveAgentToken = %q, %v", where, err)
+	}
+	if keys.Secrets["https://a.example"] != "human" || keys.Secrets["https://a.example#agent:4817305926"] != "agent-1" {
+		t.Errorf("keychain: %#v", keys.Secrets)
+	}
+	if tok, _ := SavedToken(h, "https://a.example"); tok != "human" {
+		t.Errorf("login token: %q", tok)
+	}
+	if tok, _ := AgentToken(h, "https://a.example", "4817305926"); tok != "agent-1" {
+		t.Errorf("agent token: %q", tok)
+	}
+	// With one agent token for the instance, it is found without the project.
+	if tok, _ := AgentToken(h, "https://a.example", ""); tok != "agent-1" {
+		t.Errorf("only agent token: %q", tok)
+	}
+	_, _ = SaveAgentToken(h, "https://a.example", "4818417037", "agent-2")
+	if tok, _ := AgentToken(h, "https://a.example", ""); tok != "" {
+		t.Errorf("two agent tokens and no project: %q", tok)
+	}
+	if tok, _ := AgentToken(h, "https://a.example", "nope"); tok != "" {
+		t.Errorf("unknown project: %q", tok)
+	}
+	// A login keeps the agent tokens; a logout removes only the login.
+	_, _ = SaveToken(h, "https://a.example", "human-2")
+	if tok, _ := AgentToken(h, "https://a.example", "4817305926"); tok != "agent-1" {
+		t.Errorf("after login: %q", tok)
+	}
+	if removed, _ := DeleteToken(h, "https://a.example"); !removed {
+		t.Error("logout removed nothing")
+	}
+	if tok, _ := SavedToken(h, "https://a.example"); tok != "" {
+		t.Errorf("login after logout: %q", tok)
+	}
+	if tok, _ := AgentToken(h, "https://a.example", "4817305926"); tok != "agent-1" {
+		t.Errorf("agent token after logout: %q", tok)
+	}
+}
+
+func TestAgentTokenFallsBackToTheFile(t *testing.T) {
+	h, keys := newHost(t)
+	keys.Broken = true
+	where, err := SaveAgentToken(h, "https://a.example", "4817305926", "agent-1")
+	if err != nil || where != File(h) {
+		t.Fatalf("SaveAgentToken = %q, %v", where, err)
+	}
+	if tok, _ := AgentToken(h, "https://a.example", "4817305926"); tok != "agent-1" {
+		t.Errorf("agent token: %q", tok)
+	}
+}
+
+func TestResolveTokenUsesTheAgentTokenWithoutALogin(t *testing.T) {
+	h, _ := newHost(t)
+	_, _ = SaveAgentToken(h, "https://a.example", "4817305926", "agent-1")
+	if tok, _ := ResolveToken(h, "", "https://a.example"); tok != "agent-1" {
+		t.Errorf("ResolveToken = %q", tok)
+	}
+	if u, _ := ResolveURL(h, ""); u != "https://a.example" {
+		t.Errorf("current: %q", u)
+	}
+}

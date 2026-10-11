@@ -27,7 +27,19 @@ const StorageKeychain = "keychain"
 type HostEntry struct {
 	Token   string `json:"token,omitempty"`
 	Storage string `json:"storage,omitempty"`
+	// Agents are the agent tokens of `ce setup`, by public project ID. They are separate from
+	// the login: `ce mcp` uses only an agent token, never the login of a person.
+	Agents map[string]Credential `json:"agents,omitempty"`
 }
+
+// Credential is a token in the keychain (Storage "keychain") or in the file.
+type Credential struct {
+	Token   string `json:"token,omitempty"`
+	Storage string `json:"storage,omitempty"`
+}
+
+// agentAccount is the keychain account of an agent token.
+func agentAccount(url, project string) string { return url + "#agent:" + project }
 
 // UserConfig is ~/.config/checkend/config.json.
 type UserConfig struct {
@@ -108,15 +120,89 @@ func SaveToken(h *host.Host, url, token string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	entry := HostEntry{Token: token}
+	entry := cfg.Hosts[url]
+	entry.Token, entry.Storage = token, ""
 	where := File(h)
 	if useKeychain(h) && h.Keyring.Set(url, token) == nil {
-		entry = HostEntry{Storage: StorageKeychain}
+		entry.Token, entry.Storage = "", StorageKeychain
 		where = StorageKeychain
 	}
 	cfg.Current = url
 	cfg.Hosts[url] = entry
 	return where, WriteUserConfig(h, cfg)
+}
+
+// SaveAgentToken saves the agent token of an app (public project ID), next to the login of the
+// instance, which stays unchanged. It returns StorageKeychain or the path of the file. The
+// instance becomes the current one when there is none.
+func SaveAgentToken(h *host.Host, url, project, token string) (string, error) {
+	cfg, err := ReadUserConfig(h)
+	if err != nil {
+		return "", err
+	}
+	entry := cfg.Hosts[url]
+	if entry.Agents == nil {
+		entry.Agents = map[string]Credential{}
+	}
+	cred, where := Credential{Token: token}, File(h)
+	if useKeychain(h) && h.Keyring.Set(agentAccount(url, project), token) == nil {
+		cred, where = Credential{Storage: StorageKeychain}, StorageKeychain
+	}
+	entry.Agents[project] = cred
+	cfg.Hosts[url] = entry
+	if cfg.Current == "" {
+		cfg.Current = url
+	}
+	return where, WriteUserConfig(h, cfg)
+}
+
+// AgentStorage is where the agent token of an app is: StorageKeychain or the config file.
+func AgentStorage(h *host.Host, url, project string) string {
+	cfg, err := ReadUserConfig(h)
+	if err == nil && cfg.Hosts[url].Agents[project].Storage == StorageKeychain {
+		return StorageKeychain
+	}
+	return File(h)
+}
+
+// AgentToken is the agent token of an app of the instance. With project "", it is the only
+// agent token of the instance. "" when there is none.
+func AgentToken(h *host.Host, url, project string) (string, error) {
+	cfg, err := ReadUserConfig(h)
+	if err != nil {
+		return "", err
+	}
+	agents := cfg.Hosts[url].Agents
+	if project == "" {
+		if len(agents) != 1 {
+			return "", nil
+		}
+		for p := range agents {
+			project = p
+		}
+	}
+	cred, ok := agents[project]
+	if !ok {
+		return "", nil
+	}
+	if cred.Storage != StorageKeychain {
+		return cred.Token, nil
+	}
+	return keychainToken(h, agentAccount(url, project), url)
+}
+
+func keychainToken(h *host.Host, account, url string) (string, error) {
+	if h.Keyring == nil {
+		return "", nil
+	}
+	token, err := h.Keyring.Get(account)
+	if errors.Is(err, credstore.ErrNotFound) {
+		return "", nil
+	}
+	if err != nil {
+		return "", clierr.New(clierr.Auth, fmt.Sprintf("Cannot read the token from the keychain: %v", err), fmt.Sprintf("Run `ce login --url %s`.", url))
+	}
+	return token, nil
 }
 
 // DeleteToken removes the saved token of url. It returns false when there was none.
@@ -126,7 +212,7 @@ func DeleteToken(h *host.Host, url string) (bool, error) {
 		return false, err
 	}
 	entry, ok := cfg.Hosts[url]
-	if !ok {
+	if !ok || (entry.Token == "" && entry.Storage == "") {
 		return false, nil
 	}
 	if entry.Storage == StorageKeychain && h.Keyring != nil {
@@ -134,7 +220,12 @@ func DeleteToken(h *host.Host, url string) (bool, error) {
 			return false, clierr.Fail(fmt.Sprintf("Cannot remove the token from the keychain: %v", err))
 		}
 	}
-	delete(cfg.Hosts, url)
+	// The agent tokens of `ce setup` stay: a logout is for the login of a person.
+	if len(entry.Agents) > 0 {
+		cfg.Hosts[url] = HostEntry{Agents: entry.Agents}
+	} else {
+		delete(cfg.Hosts, url)
+	}
 	if cfg.Current == url {
 		cfg.Current = ""
 	}
@@ -168,7 +259,12 @@ func ResolveToken(h *host.Host, flag, url string) (string, error) {
 			return value, nil
 		}
 	}
-	return SavedToken(h, url)
+	token, err := SavedToken(h, url)
+	if token != "" || err != nil {
+		return token, err
+	}
+	// Without a login, the agent token of `ce setup` (when the instance has only one).
+	return AgentToken(h, url, "")
 }
 
 // SavedToken is the token that `ce login` or `ce setup` saved for this exact URL. "" when none.
@@ -181,17 +277,7 @@ func SavedToken(h *host.Host, url string) (string, error) {
 	if entry.Storage != StorageKeychain {
 		return entry.Token, nil
 	}
-	if h.Keyring == nil {
-		return "", nil
-	}
-	token, err := h.Keyring.Get(url)
-	if errors.Is(err, credstore.ErrNotFound) {
-		return "", nil
-	}
-	if err != nil {
-		return "", clierr.New(clierr.Auth, fmt.Sprintf("Cannot read the token from the keychain: %v", err), fmt.Sprintf("Run `ce login --url %s`.", url))
-	}
-	return token, nil
+	return keychainToken(h, url, url)
 }
 
 // HasSavedHosts reports whether `ce login` saved any instance.

@@ -115,8 +115,11 @@ func TestProjectDeleteNeedsApproval(t *testing.T) {
 		return nil
 	}
 	r := cli.Run([]string{"project", "delete", "app", "--yes"}, Options{Env: env, TTY: true})
-	Code(t, r, 0)
+	Code(t, r, 6)
 	Contains(t, r.Stdout, "needs approval")
+	js := cli.Run([]string{"project", "delete", "app", "--yes"}, Options{Env: env})
+	Code(t, js, 6)
+	Equal(t, js.JSON(t)["status"], "approval_required")
 }
 
 func TestProjectDeleteUnknownProject(t *testing.T) {

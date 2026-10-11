@@ -73,11 +73,41 @@ func (s *Session) URL() (string, error) {
 	return url, nil
 }
 
-// Token returns the token for url ("" when none) and hides it in the output.
+// Token returns the token for url ("" when none) and hides it in the output. Without a login,
+// it is the agent token of the linked app (from `ce setup`).
 func (s *Session) Token(url string) (string, error) {
 	token, err := config.ResolveToken(s.Host, s.String("token"), url)
+	if token == "" && err == nil {
+		if link, _ := s.Link(); link != nil {
+			token, err = config.AgentToken(s.Host, url, link.Project)
+		}
+	}
 	s.Out.Hide(token)
 	return token, err
+}
+
+// AgentToken is the agent token for `ce mcp`: CHECKEND_AGENT_TOKEN, else the saved agent token
+// of the linked app, else the only agent token of the instance. Never the login of a person.
+func (s *Session) AgentToken(url string) (string, error) {
+	token := s.Host.Getenv("CHECKEND_AGENT_TOKEN")
+	if token == "" {
+		ref, err := s.ProjectRef()
+		if err != nil {
+			return "", err
+		}
+		if ref != "" {
+			if token, err = config.AgentToken(s.Host, url, ref); err != nil {
+				return "", err
+			}
+		}
+		if token == "" {
+			if token, err = config.AgentToken(s.Host, url, ""); err != nil {
+				return "", err
+			}
+		}
+	}
+	s.Out.Hide(token)
+	return token, nil
 }
 
 // API returns a client with a token, or exit 5 with the next step.

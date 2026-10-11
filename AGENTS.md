@@ -53,7 +53,7 @@ install.sh          The install script (macOS and Linux).
    unchanged in shape and key order. Errors on stderr; in JSON mode `{"error", "hint"}`. Each error
    gives the next step.
 5. **Exit codes are a contract:** 0 OK, 1 error, 2 usage, 3 not found, 4 conflict,
-   5 authentication. Do not change them.
+   5 authentication, 6 accepted and waiting for approval. Do not change them; add new ones only.
 6. **A typo never does anything.** Unknown commands, options or extra arguments exit 2 before
    any request or file write. Check input that the CLI owns (for example `--section`) before
    the request.
@@ -63,6 +63,8 @@ install.sh          The install script (macOS and Linux).
 8. **Tokens.** Never print a token (except once at token creation, when that exists). Never write
    a token to `.checkend.json`. A saved token goes only to its own URL. Tokens go to the OS
    keychain; the config file is the fallback. Add new token sources to `Output.Hide()`.
+   `ce setup` saves a separate agent token for each app (keychain account `<url>#agent:<id>`);
+   `ce mcp` uses only an agent token, never the login of a person.
 9. **HTTPS only**, except `http://localhost` and `http://127.0.0.1`. Do not follow redirects.
 10. **Destructive commands** ask for confirmation on a terminal and need `--yes` otherwise.
 11. **API changes are additive.** If the CLI needs a server change, ask the server maintainers;

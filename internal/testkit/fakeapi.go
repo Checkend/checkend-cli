@@ -45,8 +45,10 @@ type Reply struct {
 type FakeAPI struct {
 	Token string
 	// SetupKey opens the /v1/setup routes. Tokens are more valid API tokens (agent tokens).
-	SetupKey   string
-	Tokens     []string
+	SetupKey string
+	Tokens   []string
+	// AgentApps is the app (public project ID) of each agent token.
+	AgentApps  map[string]string
 	SetupMD    string
 	TestEvents map[string]bool
 	Reports    []string
@@ -79,6 +81,7 @@ func NewFakeAPI(t testing.TB) *FakeAPI {
 		Token:      "ce_test_token_0123456789",
 		SetupKey:   "cks_test_setup_key_0123456789abcdef",
 		TestEvents: map[string]bool{},
+		AgentApps:  map[string]string{},
 		Health: J{
 			"status":     "ok",
 			"version":    "0.2.0",
@@ -503,10 +506,14 @@ func (f *FakeAPI) validToken(authorization string) bool {
 func (f *FakeAPI) setup(r *Request) *Reply {
 	key := r.Authorization == "Bearer "+f.SetupKey
 	if !key && r.Authorization != "Bearer "+f.Token {
-		if f.validToken(r.Authorization) {
+		if !f.validToken(r.Authorization) {
+			return &Reply{Status: 401, Body: J{"error": "unauthorized"}}
+		}
+		// An agent token can report the steps of its own app only.
+		app := f.AgentApps[strings.TrimPrefix(r.Authorization, "Bearer ")]
+		if m := regexp.MustCompile(`^/v1/setup/apps/([^/]+)/report$`).FindStringSubmatch(r.Path); m == nil || app == "" || f.FindProject(m[1]) == nil || fmt.Sprint(f.FindProject(m[1])["id"]) != app {
 			return &Reply{Status: 403, Body: J{"error": "forbidden", "required_scope": "admin"}}
 		}
-		return &Reply{Status: 401, Body: J{"error": "unauthorized"}}
 	}
 	body, _ := r.Body.(J)
 	if r.Method == "POST" && r.Path == "/v1/setup/apps" {
@@ -537,6 +544,7 @@ func (f *FakeAPI) setup(r *Request) *Reply {
 		}
 		token := fmt.Sprintf("ck_test_agent_token_%04d_0123456789", len(f.Tokens)+1)
 		f.Tokens = append(f.Tokens, token)
+		f.AgentApps[token] = fmt.Sprint(f.FindProject(ref)["id"])
 		return &Reply{Status: 201, Body: J{"data": J{"id": len(f.Tokens), "name": name, "scopes": []any{"issues:read", "issues:write"}, "created_at": "2026-10-10T12:00:00.000Z", "token": token}}}
 	}
 	if m := regexp.MustCompile(`^/v1/setup/apps/([^/]+)/(test-event|report)$`).FindStringSubmatch(r.Path); m != nil && r.Method == "POST" {

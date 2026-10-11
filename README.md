@@ -40,10 +40,11 @@ In Checkend, "Copy prompt" gives a prompt for Claude Code, Codex or Cursor with 
 ce setup --url https://checkend.example.com --key cks_…
 ```
 
-`ce setup` registers the app, writes `.checkend.json`, saves an agent token in the OS keychain,
-sends a test event, and prints the MCP command and the code changes for the agent. The setup key
-and the token are never printed. The agent connects MCP with `ce mcp`, so the token stays in the
-keychain:
+`ce setup` registers the app, writes `.checkend.json`, saves an agent token for the app in the OS
+keychain, sends a test event, and prints the MCP command and the code changes for the agent. The
+agent token (scopes `issues:read` and `issues:write`) is separate from your own login, which
+stays unchanged. The setup key and the token are never printed. The agent connects MCP with
+`ce mcp`, which uses only the agent token, never your login, and keeps it in the keychain:
 
 ```sh
 claude mcp add checkend -- ce mcp --url https://checkend.example.com
@@ -101,7 +102,7 @@ claude mcp add checkend -- ce mcp --url https://checkend.example.com
 | `ce project delete <id\|slug> [--yes]` | Delete a project and its data. Asks for the name on a terminal; `--yes` in CI |
 | `ce setup --url <url> --key <cks_…>` | Connect the repo with a setup key (for coding agents; see above) |
 | `ce setup report sdk_installed` | Report a setup step |
-| `ce mcp [--url <url>]` | A stdio MCP server for agents; the token stays in the keychain |
+| `ce mcp [--url <url>]` | A stdio MCP server for agents, with the agent token of `ce setup` (or `CHECKEND_AGENT_TOKEN`) |
 | `ce deploy [--release <v>] [--environment <name>] [--commit <sha>] [--commits-since <sha>]` | Report a deploy from CI (default commit: git HEAD) |
 | `ce sourcemaps upload --release <v> [--url-prefix <p>] <dir\|file.map>...` | Build the index of each source map locally and upload it |
 | `ce dsn rotate [--revoke-old [--yes]]` | Make a new DSN key; then revoke the old keys |
@@ -137,6 +138,7 @@ token goes only to the URL that it was saved for.
 | 3 | Not found |
 | 4 | Conflict |
 | 5 | Authentication (not logged in, or the token was rejected) |
+| 6 | Accepted, waiting for approval (for example `ce project delete` with `REQUIRE_APPROVAL`) |
 
 ## Safety
 

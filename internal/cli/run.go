@@ -199,7 +199,8 @@ Options for all commands:
   -V, --version     Show the version
 
 Run `+"`ce <command> --help`"+` for the options of a command.
-Exit codes: 0 OK, 1 error, 2 usage, 3 not found, 4 conflict, 5 authentication.
+Exit codes: 0 OK, 1 error, 2 usage, 3 not found, 4 conflict, 5 authentication,
+6 waiting for approval.
 `, version.Version, strings.Join(lines, "\n"))
 }
 

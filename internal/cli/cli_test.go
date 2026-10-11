@@ -158,3 +158,9 @@ func TestHelpKeepsTwoSpacesAfterEachCommandName(t *testing.T) {
 		}
 	}
 }
+
+func TestHelpListsExitCode6(t *testing.T) {
+	_, cli, _ := setup(t)
+	Contains(t, cli.Run([]string{"--help"}).Stdout, "6 waiting for approval")
+	Contains(t, cli.Run([]string{"project", "delete", "--help"}).Stdout, "Exit code 6")
+}

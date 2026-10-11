@@ -143,6 +143,8 @@ func projectDeleteCommand() *Command {
 			"  --yes      Do not ask (for scripts). Needs an admin token.",
 			"",
 			"The DSN keys stop at once; the issues and events are purged. It cannot be undone.",
+			"Exit code 6: the server accepted the delete, and it waits for an approval",
+			"(REQUIRE_APPROVAL). Another person or admin completes it in Checkend.",
 		},
 		Options: map[string]Kind{"yes": Bool},
 		Args:    []string{"project"},
@@ -175,7 +177,7 @@ func projectDeleteCommand() *Command {
 				s.Out.Data(raw, func(d any) string {
 					return fmt.Sprintf("The delete of %s needs approval: %s", slug, jv.Str(jv.Get(d, "message")))
 				})
-				return nil
+				return Exit(clierr.Pending)
 			}
 			result := map[string]any{"data": map[string]any{"id": project["id"], "slug": project["slug"], "deleted": true}}
 			s.Out.Data(result, func(any) string {
