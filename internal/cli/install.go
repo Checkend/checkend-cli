@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -33,12 +34,45 @@ func releaseSource(s *Session) serverrelease.Source {
 	return src
 }
 
-// pickRelease is the release of --version, else the latest one.
+// pickRelease is the release of --version, else the latest one. For `ce upgrade`, it refuses
+// a downgrade (unless --allow-downgrade) and always an older migration level.
 func pickRelease(s *Session) (*serverrelease.Release, error) {
+	var rel *serverrelease.Release
+	var err error
 	if v := s.String("version"); v != "" {
-		return releaseSource(s).Get(v)
+		rel, err = releaseSource(s).Get(v)
+	} else {
+		rel, err = releaseSource(s).Latest()
 	}
-	return releaseSource(s).Latest()
+	if err != nil || s.upgrade == nil {
+		return rel, err
+	}
+	return rel, checkUpgrade(s.upgrade, &rel.Manifest, s.allowDowngrade)
+}
+
+// errUpToDate ends `ce upgrade` when the install has the release already.
+var errUpToDate = errors.New("up to date")
+
+// checkUpgrade compares a release with the installed one. Migrations are forward-only, so a
+// release with an older migration level is refused even with --allow-downgrade.
+func checkUpgrade(installed *config.Install, m *serverrelease.Manifest, allowDowngrade bool) error {
+	if installed.Migrations != "" && m.Migrations.Latest < installed.Migrations {
+		return clierr.New(clierr.Failure,
+			fmt.Sprintf("Checkend %s has migration level %s; the install has %s. Migrations never run backwards.", m.Version, m.Migrations.Latest, installed.Migrations),
+			"Choose a release with the same or a newer migration level.")
+	}
+	switch serverrelease.Compare(m.Version, installed.Version) {
+	case -1:
+		if !allowDowngrade {
+			return clierr.New(clierr.Failure, fmt.Sprintf("Checkend %s is older than the installed %s.", m.Version, installed.Version),
+				"Run `ce upgrade --version "+m.Version+" --allow-downgrade` if you mean it (the data stays at its migration level).")
+		}
+	case 0:
+		if m.Migrations.Latest == installed.Migrations || installed.Migrations == "" {
+			return errUpToDate
+		}
+	}
+	return nil
 }
 
 // needApproval checks, before any request or file write, that the command can ask or has --yes.
@@ -70,7 +104,10 @@ func approve(s *Session, plan []string) error {
 	return clierr.UsageError("You did not confirm. Nothing changed.", "Run the command again to install.")
 }
 
-func releaseLine(r *serverrelease.Release) string {
+func releaseLine(s *Session, r *serverrelease.Release) string {
+	if s.upgrade != nil {
+		return fmt.Sprintf("Upgrade Checkend from %s to %s (commit %s, signed with key %s).", s.upgrade.Version, r.Manifest.Version, short(r.Manifest.Commit), r.Signer)
+	}
 	return fmt.Sprintf("Install Checkend %s (commit %s, signed with key %s).", r.Manifest.Version, short(r.Manifest.Commit), r.Signer)
 }
 
@@ -131,9 +168,10 @@ func (e *envFile) String() string {
 	return b.String()
 }
 
-// secrets fills ADMIN_TOKEN and ENCRYPTION_KEYS when they are missing, and always writes a new
-// setup code. It returns the setup code for the link and the keys that it kept.
-func (e *envFile) secrets(now time.Time) (code string, kept []string) {
+// secrets fills ADMIN_TOKEN and ENCRYPTION_KEYS when they are missing, and writes a new setup
+// code (an upgrade keeps the one there is). It returns the setup code for the link ("" when
+// kept) and the keys that it kept.
+func (e *envFile) secrets(now time.Time, newCode bool) (code string, kept []string) {
 	if len(e.values["ADMIN_TOKEN"]) >= 32 {
 		kept = append(kept, "ADMIN_TOKEN")
 	} else {
@@ -143,6 +181,9 @@ func (e *envFile) secrets(now time.Time) (code string, kept []string) {
 		kept = append(kept, "ENCRYPTION_KEYS")
 	} else {
 		e.set("ENCRYPTION_KEYS", newEncryptionKeys())
+	}
+	if !newCode && e.values["SETUP_CODE"] != "" {
+		return "", kept
 	}
 	stored, code := newSetupCode(now)
 	e.set("SETUP_CODE", stored)
@@ -337,19 +378,31 @@ func installDockerCommand() *Command {
 			envPath, composePath := filepath.Join(dir, ".env"), filepath.Join(dir, "compose.yaml")
 			old, readErr := os.ReadFile(envPath)
 			env := parseEnv(string(old))
-			code, kept := env.secrets(s.Host.Now())
+			code, kept := env.secrets(s.Host.Now(), s.upgrade == nil)
 			env.set("PUBLIC_URL", url)
 			s.Out.Hide(env.values["ADMIN_TOKEN"])
 			s.Out.Hide(env.values["ENCRYPTION_KEYS"])
-			if err := approve(s, []string{
-				releaseLine(rel),
+			running := s.upgrade != nil && dockerRunning(s, dir)
+			plan := []string{
+				releaseLine(s, rel),
 				"Image: " + rel.Manifest.Image.Ref(),
 				fmt.Sprintf("Write %s (Checkend on 127.0.0.1:%d, a nightly backup, a volume, restarts).", composePath, port),
 				secretsLine(envPath, kept, readErr != nil),
 				fmt.Sprintf("Save the admin token for %s in the OS keychain.", url),
-				"Start nothing: you run `docker compose up -d` after this.",
-			}); err != nil {
+			}
+			backup := fmt.Sprintf("/data/backups/checkend-before-%s-%s.sqlite", rel.Manifest.Version, s.Host.Now().UTC().Format("20060102-150405"))
+			if running {
+				plan = append(plan, "Back up the database to "+backup+" first, then restart with `docker compose up -d`.")
+			} else {
+				plan = append(plan, "Start nothing: you run `docker compose up -d` after this.")
+			}
+			if err := approve(s, plan); err != nil {
 				return err
+			}
+			if running {
+				if err := dockerBackup(s, dir, backup); err != nil {
+					return err
+				}
 			}
 			text := compose(composeOptions{Image: rel.Manifest.Image.Ref(), Port: port})
 			if err := config.WriteFile(composePath, []byte(text), 0o644); err != nil {
@@ -364,12 +417,43 @@ func installDockerCommand() *Command {
 				return err
 			}
 			result := installResult{Kind: "docker", URL: url, Version: rel.Manifest.Version, Dir: dir,
-				Files: []string{composePath, envPath}, Login: login, SetupURL: url + "/setup#" + code,
-				Next: []string{"docker compose --project-directory " + dir + " up -d"}}
+				Files: []string{composePath, envPath}, Login: login, Next: []string{}}
+			if code != "" {
+				result.SetupURL = url + "/setup#" + code
+			}
+			if running {
+				if _, err := dockerCompose(s, dir, "up", "-d", "--remove-orphans"); err != nil {
+					return clierr.New(clierr.Failure, fmt.Sprintf("docker compose up failed: %v", err), "The backup is "+backup+" in the volume. Fix the error, then run the command again.")
+				}
+			} else {
+				result.Next = append(result.Next, "docker compose --project-directory "+dir+" up -d")
+			}
 			s.Out.Data(result, func(any) string {
 				return renderInstall(result, fmt.Sprintf("Installed Checkend %s for Docker in %s.", result.Version, dir))
 			})
 			return nil
 		},
 	}
+}
+
+// dockerCompose runs `docker compose` for the compose.yaml in dir on this machine.
+func dockerCompose(s *Session, dir string, args ...string) ([]byte, error) {
+	return s.Host.Run(nil, "docker", append([]string{"compose", "--project-directory", dir}, args...)...)
+}
+
+// dockerRunning reports whether the checkend service runs.
+func dockerRunning(s *Session, dir string) bool {
+	out, err := dockerCompose(s, dir, "ps", "-q", "checkend")
+	return err == nil && strings.TrimSpace(string(out)) != ""
+}
+
+// dockerBackup writes a consistent copy of the database to file in the volume.
+func dockerBackup(s *Session, dir, file string) error {
+	if _, err := dockerCompose(s, dir, "exec", "-T", "checkend", "mkdir", "-p", "/data/backups"); err != nil {
+		return clierr.New(clierr.Failure, fmt.Sprintf("Cannot reach the checkend service: %v", err), "Check `docker compose --project-directory "+dir+" ps`.")
+	}
+	if _, err := dockerCompose(s, dir, "exec", "-T", "checkend", "node", "scripts/backup.ts", file); err != nil {
+		return clierr.New(clierr.Failure, fmt.Sprintf("The backup failed: %v", err), "Nothing changed. Check `docker compose --project-directory "+dir+" logs checkend`.")
+	}
+	return nil
 }

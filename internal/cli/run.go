@@ -26,7 +26,7 @@ var globalOptions = map[string]Kind{
 func commands() []*Command {
 	return slices.Concat(authCommands(), setupCommands(), []*Command{mcpCommand(), initCommand(), nextCommand(), deployCommand(), migrateCommand()},
 		issueCommands(), eventCommands(), projectCommands(), []*Command{dsnRotateCommand(), sourcemapsUploadCommand()},
-		installCommands())
+		installCommands(), serverCommands())
 }
 
 var groups = map[string]string{

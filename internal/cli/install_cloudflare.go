@@ -185,6 +185,21 @@ func (c *cfClient) upload(account, name string, metadata map[string]any, m *serv
 	return c.do("PUT", "/accounts/"+account+"/workers/scripts/"+name, w.FormDataContentType(), buf.Bytes(), nil)
 }
 
+// newCFClient is a client of the Cloudflare API with this token (hidden in the output).
+func newCFClient(s *Session, token string) *cfClient {
+	s.Out.Hide(token)
+	base := cloudflareAPI
+	if s.Host.CloudflareAPI != "" {
+		base = s.Host.CloudflareAPI
+	}
+	httpClient := http.Client{Timeout: 2 * time.Minute}
+	if s.Host.HTTP != nil {
+		httpClient = *s.Host.HTTP
+	}
+	httpClient.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	return &cfClient{base: base, token: token, http: &httpClient}
+}
+
 // cloudflareToken is CLOUDFLARE_API_TOKEN, else the token in the keychain, else (on a
 // terminal) a token that the user makes with the template link. fresh is true for a new one.
 func cloudflareToken(s *Session, r2 bool) (token string, fresh bool, err error) {
@@ -385,17 +400,7 @@ func installCloudflareCommand() *Command {
 			if err != nil {
 				return err
 			}
-			s.Out.Hide(token)
-			base := cloudflareAPI
-			if s.Host.CloudflareAPI != "" {
-				base = s.Host.CloudflareAPI
-			}
-			httpClient := http.Client{Timeout: 2 * time.Minute}
-			if s.Host.HTTP != nil {
-				httpClient = *s.Host.HTTP
-			}
-			httpClient.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-			c := &cfClient{base: base, token: token, http: &httpClient}
+			c := newCFClient(s, token)
 			account, err := pickAccount(s, c)
 			if err != nil {
 				return err
@@ -465,7 +470,7 @@ func installCloudflareCommand() *Command {
 			}
 			s.Out.Hide(adminToken)
 
-			plan := []string{releaseLine(rel), fmt.Sprintf("Cloudflare account: %s (%s).", account.Name, acc)}
+			plan := []string{releaseLine(s, rel), fmt.Sprintf("Cloudflare account: %s (%s).", account.Name, acc)}
 			if db.exists {
 				plan = append(plan, fmt.Sprintf("Use the D1 database %s (%d migrations applied).", database, len(db.applied)))
 			} else {
@@ -594,8 +599,12 @@ func installCloudflareCommand() *Command {
 			if !slices.Contains(worker.secrets, "ENCRYPTION_KEYS") {
 				secrets["ENCRYPTION_KEYS"] = newEncryptionKeys()
 			}
-			stored, code := newSetupCode(s.Host.Now())
-			secrets["SETUP_CODE"] = stored
+			code := ""
+			if s.upgrade == nil {
+				var stored string
+				stored, code = newSetupCode(s.Host.Now())
+				secrets["SETUP_CODE"] = stored
+			}
 			for _, k := range []string{"ADMIN_TOKEN", "ENCRYPTION_KEYS", "SETUP_CODE"} {
 				v, ok := secrets[k]
 				if !ok {
@@ -644,9 +653,9 @@ func installCloudflareCommand() *Command {
 			} else {
 				result.Next = append(result.Next, "The Worker does not answer yet; workers.dev can take a minute. Then open the link.")
 			}
-			if setupOpen {
+			if setupOpen && code != "" {
 				result.SetupURL = workerURL + "/setup#" + code
-			} else {
+			} else if code != "" {
 				result.Next = append(result.Next, "Setup is done: sign in at "+workerURL)
 			}
 			s.Out.Data(result, func(any) string {

@@ -180,7 +180,7 @@ func heredoc(file, text string) string {
 	return "$SUDO tee \"" + file + "\" >/dev/null <<'CE_EOF'\n" + text + "CE_EOF\n"
 }
 
-func installScript(dir, composeText, caddyfile string, env *envFile) string {
+func installScript(dir, composeText, caddyfile string, env *envFile, backup string) string {
 	var b strings.Builder
 	b.WriteString("# ce:install\nset -eu\ndir=" + shellQuote(dir) + "\n" + sudoLine)
 	b.WriteString(`. /etc/os-release
@@ -203,7 +203,16 @@ if ! $SUDO docker compose version >/dev/null 2>&1; then
   $SUDO apt-get install -y -q docker-ce docker-ce-cli containerd.io docker-compose-plugin
   $SUDO systemctl enable --now docker
 fi
-umask 077
+`)
+	if backup != "" {
+		// An upgrade: a consistent copy of the database first, while the old version runs.
+		b.WriteString(`if $SUDO test -f "$dir/compose.yaml" && [ -n "$($SUDO docker compose --project-directory "$dir" ps -q checkend 2>/dev/null)" ]; then
+  $SUDO docker compose --project-directory "$dir" exec -T checkend mkdir -p /data/backups
+  $SUDO docker compose --project-directory "$dir" exec -T checkend node scripts/backup.ts ` + backup + `
+fi
+`)
+	}
+	b.WriteString(`umask 077
 $SUDO install -d -m 700 "$dir"
 `)
 	b.WriteString(heredoc("$dir/.env.new", env.String()))
@@ -301,7 +310,7 @@ func installSSHCommand() *Command {
 			tunnel := s.Bool("tunnel")
 			tunnelToken := s.Host.Getenv("CHECKEND_TUNNEL_TOKEN")
 			s.Out.Hide(tunnelToken)
-			if tunnel && tunnelToken == "" && !s.Host.Interactive {
+			if tunnel && tunnelToken == "" && !s.Host.Interactive && s.upgrade == nil {
 				return clierr.UsageError("--tunnel needs the token of the Cloudflare Tunnel in CHECKEND_TUNNEL_TOKEN.",
 					"Create a tunnel in the Cloudflare dashboard (Zero Trust → Networks → Tunnels), route the domain to http://checkend:8787, and set the token.")
 			}
@@ -344,7 +353,7 @@ func installSSHCommand() *Command {
 					return clierr.Fail(fmt.Sprintf("%s/.env on the server has a value that ce cannot keep.", dir))
 				}
 			}
-			code, kept := env.secrets(s.Host.Now())
+			code, kept := env.secrets(s.Host.Now(), s.upgrade == nil)
 			url := "https://" + domain
 			env.set("PUBLIC_URL", url)
 			env.set("TRUSTED_PROXIES", "private")
@@ -376,7 +385,7 @@ func installSSHCommand() *Command {
 			}
 			plan := []string{
 				fmt.Sprintf("Server: %s (%s), SSH host key %s.", target, p.label(), fingerprint),
-				releaseLine(rel),
+				releaseLine(s, rel),
 				"Image: " + rel.Manifest.Image.Ref(),
 			}
 			if p.Docker != "yes" {
@@ -387,10 +396,15 @@ func installSSHCommand() *Command {
 				secretsLine(dir+"/.env", kept, p.Env == ""),
 				"Start the containers and wait until Checkend is healthy.",
 				fmt.Sprintf("Save the admin token for %s in the OS keychain.", url))
+			backup := ""
+			if s.upgrade != nil {
+				backup = fmt.Sprintf("/data/backups/checkend-before-%s-%s.sqlite", rel.Manifest.Version, s.Host.Now().UTC().Format("20060102-150405"))
+				plan = append(plan, "Back up the database to "+backup+" first (while the old version runs).")
+			}
 			if err := approve(s, plan); err != nil {
 				return err
 			}
-			out, err := srv.run(installScript(dir, composeText, caddyfile, env))
+			out, err := srv.run(installScript(dir, composeText, caddyfile, env, backup))
 			var health struct {
 				Status    string `json:"status"`
 				SetupOpen *bool  `json:"setup_open"`
@@ -409,14 +423,14 @@ func installSSHCommand() *Command {
 					fmt.Sprintf("See the logs: ssh -p %d %s 'docker compose --project-directory %s logs --tail 50'. Then run the command again.", port, target, dir))
 			}
 			login, err := recordInstall(s, url, config.Install{Kind: "ssh", Version: rel.Manifest.Version, Migrations: rel.Manifest.Migrations.Latest,
-				Dir: dir, Target: target.String(), Port: fmt.Sprint(port), HostKey: fingerprint}, env.values["ADMIN_TOKEN"])
+				Dir: dir, Target: target.String(), Port: fmt.Sprint(port), HostKey: fingerprint, Proxy: proxy}, env.values["ADMIN_TOKEN"])
 			if err != nil {
 				return err
 			}
 			result := installResult{Kind: "ssh", URL: url, Version: rel.Manifest.Version, Dir: dir, Target: target.String(), Login: login, Next: []string{}}
-			if health.SetupOpen == nil || *health.SetupOpen {
+			if code != "" && (health.SetupOpen == nil || *health.SetupOpen) {
 				result.SetupURL = url + "/setup#" + code
-			} else {
+			} else if code != "" {
 				result.Next = append(result.Next, "Setup is done: sign in at "+url)
 			}
 			s.Out.Data(result, func(any) string {

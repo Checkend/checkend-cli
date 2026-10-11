@@ -49,6 +49,11 @@ The first release. Nothing is tagged or published yet. Until then, build `ce` fr
   prints the setup link. The API token comes from a link that fills in the minimal permissions,
   and stays in the keychain. It refuses a Worker or a database of the same name that is not a
   Checkend install, and a database with newer migrations. `--r2` adds the R2 bucket for blobs.
+- `ce upgrade`, `ce backup`, `ce status --server` and `ce uninstall` for a server that
+  `ce install` installed. An upgrade backs up first (a copy of the database, or a D1 Time Travel
+  bookmark), keeps the secrets and the setup code, and refuses a downgrade unless
+  `--allow-downgrade`; an older migration level is always refused. An uninstall keeps the data
+  unless `--delete-data`.
 - Install methods for the first release: Homebrew, `install.sh` and the npm wrapper
   `@checkend/cli`. Each one checks the SHA-256 of the binary.
 

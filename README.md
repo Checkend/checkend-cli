@@ -107,6 +107,16 @@ claude mcp add checkend -- ce mcp --url https://checkend.example.com
 | `ce sourcemaps upload --release <v> [--url-prefix <p>] <dir\|file.map>...` | Build the index of each source map locally and upload it |
 | `ce dsn rotate [--revoke-old [--yes]]` | Make a new DSN key; then revoke the old keys |
 | `ce migrate-from-sentry` | Find the Sentry setup of the repo and get a Checkend DSN for it |
+| `ce install docker [--dir <dir>] [--port <p>]` | Write `compose.yaml` and `.env` for a signed server release on this machine |
+| `ce install ssh <user@host> --domain <d> [--tunnel] [--host-key <SHA256:…>]` | Install on an Ubuntu or Debian LTS server over SSH, behind Caddy or a Cloudflare Tunnel |
+| `ce install cloudflare [--account <id>] [--name <worker>] [--r2]` | Install on a Cloudflare account: a Worker and D1 |
+| `ce upgrade [--version <v>] [--allow-downgrade]` | Back up, then upgrade a server that `ce install` installed |
+| `ce backup [--output <file>]` | Back up its database (Cloudflare: a D1 Time Travel bookmark) |
+| `ce status --server` | Its version, health, and whether a newer release exists |
+| `ce uninstall [--delete-data]` | Remove it; the data stays unless `--delete-data` |
+
+The install commands install only a signed server release, show the plan and ask first
+(`--yes` for agents), can run again safely, never print a secret, and print the setup link.
 
 `--project` accepts the public project ID (for example `4817305926`) or the project slug. More
 commands come when the server API for them exists. `ce --help` shows only the commands that work.

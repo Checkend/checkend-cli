@@ -154,9 +154,17 @@ func statusCommand() *Command {
 	return &Command{
 		Path:    []string{"status"},
 		Summary: "Show the instance, its health and the linked project",
-		Usage:   "[--project <id|slug>]",
-		Options: map[string]Kind{"project": String},
+		Usage:   "[--project <id|slug>] [--server]",
+		Details: []string{
+			"  --project <id|slug>  The project (default: the project in .checkend.json)",
+			"  --server             The server that `ce install` installed: its version, health and",
+			"                       whether a newer release exists",
+		},
+		Options: map[string]Kind{"project": String, "server": Bool},
 		Run: func(s *Session) error {
+			if s.Bool("server") {
+				return serverStatus(s)
+			}
 			url, err := s.URL()
 			if err != nil {
 				return err

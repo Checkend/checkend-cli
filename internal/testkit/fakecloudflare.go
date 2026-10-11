@@ -191,6 +191,11 @@ func (f *FakeCloudflare) serve(w http.ResponseWriter, req *http.Request) {
 			cfReply(w, 404, nil)
 			return
 		}
+		if dm[2] == "" && req.Method == "DELETE" {
+			delete(f.Databases, dm[1])
+			cfReply(w, 200, nil)
+			return
+		}
 		f.d1(w, req, db, dm[2])
 	case rest == "/r2/buckets" && req.Method == "GET":
 		list := []any{}
@@ -304,6 +309,9 @@ func (f *FakeCloudflare) script(w http.ResponseWriter, req *http.Request, name, 
 		cfReply(w, 200, J{"id": name})
 	case s == nil:
 		cfReply(w, 404, nil)
+	case rest == "" && req.Method == "DELETE":
+		delete(f.Scripts, name)
+		cfReply(w, 200, nil)
 	case rest == "/settings" && req.Method == "GET":
 		bindings := []any{}
 		if b, ok := s.Metadata["bindings"].([]any); ok {

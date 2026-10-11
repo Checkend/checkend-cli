@@ -25,6 +25,8 @@ type Install struct {
 	// Target is user@host for ssh, and Port its SSH port.
 	Target string `json:"target,omitempty"`
 	Port   string `json:"port,omitempty"`
+	// Proxy is "caddy" or "tunnel" (ssh).
+	Proxy string `json:"proxy,omitempty"`
 	// HostKey is the SHA256 fingerprint of the SSH host key that the user confirmed.
 	HostKey string `json:"host_key,omitempty"`
 	// Account, Worker, Database and DatabaseID are the Cloudflare resources.

@@ -44,6 +44,9 @@ type Session struct {
 	p    parsed
 	link *config.Link
 	read bool
+	// upgrade is the install record when `ce upgrade` runs an install command.
+	upgrade        *config.Install
+	allowDowngrade bool
 }
 
 // String returns an option value, or "".
