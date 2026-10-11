@@ -112,6 +112,32 @@ func (c *Client) Text(path string) (string, error) {
 	return string(data), err
 }
 
+// PostRaw sends a POST with the token and returns the status, the content type and the body,
+// for protocols that are not the JSON API (MCP). It follows no redirects.
+func (c *Client) PostRaw(path string, body []byte, accept string) (int, string, []byte, error) {
+	req, err := http.NewRequest("POST", c.URL+path, bytes.NewReader(body))
+	if err != nil {
+		return 0, "", nil, err
+	}
+	req.Header.Set("Accept", accept)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "checkend-cli/"+version.Version)
+	if c.token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.token)
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		var uerr *url.Error
+		if errors.As(err, &uerr) {
+			err = uerr.Err
+		}
+		return 0, "", nil, fmt.Errorf("cannot reach %s: %w", c.URL, err)
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxBody))
+	return resp.StatusCode, resp.Header.Get("Content-Type"), data, err
+}
+
 // Delete calls DELETE path.
 func (c *Client) Delete(path string) (json.RawMessage, error) {
 	return c.Call("DELETE", path, nil, "")

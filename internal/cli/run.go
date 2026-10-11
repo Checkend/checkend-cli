@@ -24,7 +24,7 @@ var globalOptions = map[string]Kind{
 
 // commands lists only commands whose server API exists (and so they are in --help).
 func commands() []*Command {
-	return slices.Concat(authCommands(), setupCommands(), []*Command{initCommand(), nextCommand()},
+	return slices.Concat(authCommands(), setupCommands(), []*Command{mcpCommand(), initCommand(), nextCommand()},
 		issueCommands(), eventCommands(), projectCommands())
 }
 

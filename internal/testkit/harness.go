@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -134,6 +135,7 @@ func (h *Harness) Run(argv []string, opts ...Options) Result {
 			return answer, nil
 		},
 		ReadStdin: func() (string, error) { return o.Stdin, nil },
+		Stdin:     strings.NewReader(o.Stdin),
 		HTTP:      nil,
 		Now:       func() time.Time { return time.Date(2026, 10, 10, 12, 0, 0, 0, time.UTC) },
 		Keyring:   h.Keyring,

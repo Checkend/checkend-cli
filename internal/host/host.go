@@ -27,9 +27,11 @@ type Host struct {
 	Interactive bool
 	Prompt      func(question string, secret bool) (string, error)
 	ReadStdin   func() (string, error)
-	HTTP        *http.Client
-	Now         func() time.Time
-	Keyring     credstore.Keyring
+	// Stdin is the input as a stream, for `ce mcp`.
+	Stdin   io.Reader
+	HTTP    *http.Client
+	Now     func() time.Time
+	Keyring credstore.Keyring
 }
 
 // Getenv returns an environment variable, or "".

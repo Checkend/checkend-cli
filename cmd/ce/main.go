@@ -95,6 +95,7 @@ func main() {
 		Interactive: stdout.IsTTY && term.IsTerminal(int(os.Stdin.Fd())),
 		Prompt:      prompt,
 		ReadStdin:   readStdin,
+		Stdin:       stdin,
 		Now:         time.Now,
 		Keyring:     credstore.System{},
 	}
