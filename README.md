@@ -168,16 +168,16 @@ of [Checkend/checkend](https://github.com/Checkend/checkend):
 ```sh
 npx wrangler d1 migrations apply DB --local --persist-to /tmp/checkend-e2e
 npx wrangler dev --port 8799 --persist-to /tmp/checkend-e2e --env-file /dev/null \
-  --var ADMIN_TOKEN:e2e-token
+  --var ADMIN_TOKEN:e2e-test-admin-token-0123456789abcdef
 ```
 
 Then, in this repo:
 
 ```sh
-CHECKEND_E2E_URL=http://127.0.0.1:8799 CHECKEND_E2E_TOKEN=e2e-token make e2e
+CHECKEND_E2E_URL=http://127.0.0.1:8799 CHECKEND_E2E_TOKEN=e2e-test-admin-token-0123456789abcdef make e2e
 ```
 
-The test logs in, runs `ce init`, sends one error to the DSN as a Sentry SDK does, and reads it
+The server needs an `ADMIN_TOKEN` of at least 32 characters. The test logs in, runs `ce init`, sends one error to the DSN as a Sentry SDK does, and reads it
 back with `ce next`, `ce issue list`, `ce issue view` and `ce event view`.
 
 ## Contributing

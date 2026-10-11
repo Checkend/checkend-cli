@@ -17,6 +17,7 @@ binary for macOS, Linux and Windows. Standard library first; few dependencies.
 | `make e2e` | The end-to-end test against a real server (see README.md). |
 | `go run ./cmd/ce <args>` | Run the CLI from source. |
 | `cd npm && npm test` | The npm wrapper tests. |
+| `CHECKEND_RECIPES_TS=<recipes.ts> go test -run TestServerRecipes ./internal/cli/` | Check the ce commands that the server recipes name (CI does this every day). |
 | `node scripts/gen-sourcemap-fixtures.mjs <server checkout> [esbuild]` | Build the source map fixtures again with the server code. |
 
 ## Layout
@@ -67,9 +68,11 @@ install.sh          The install script (macOS and Linux).
    `ce mcp` uses only an agent token, never the login of a person.
 9. **HTTPS only**, except `http://localhost` and `http://127.0.0.1`. Do not follow redirects.
 10. **Destructive commands** ask for confirmation on a terminal and need `--yes` otherwise.
-11. **API changes are additive.** If the CLI needs a server change, ask the server maintainers;
+11. **The server recipes name ce commands.** CI checks them against the command tree. Do not
+    rename or remove a command or an option that a recipe uses; change the recipe first.
+12. **API changes are additive.** If the CLI needs a server change, ask the server maintainers;
     do not work around the API.
-12. **No literal control characters in source.** Write them as escape sequences (`\u202e`);
+13. **No literal control characters in source.** Write them as escape sequences (`\u202e`);
     staticcheck checks this.
 
 ## How we build

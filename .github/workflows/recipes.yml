@@ -1,0 +1,40 @@
+# The server's agent recipes (src/core/recipes.ts of Checkend/checkend) name ce commands. This job
+# checks that each command and option exists in the CLI. It also runs every day, so that a recipe
+# change on the server that names a missing command is found without a change here.
+name: Server recipes
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: The Checkend/checkend branch, tag or commit
+        default: main
+
+permissions:
+  contents: read
+
+jobs:
+  recipes:
+    name: ce commands in the server recipes
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Download src/core/recipes.ts
+        env:
+          REF: ${{ inputs.ref || 'main' }}
+        run: |
+          case "$REF" in *[!A-Za-z0-9._/-]*) echo "Bad ref: $REF" >&2; exit 1 ;; esac
+          curl -fsSL -o "$RUNNER_TEMP/recipes.ts" "https://raw.githubusercontent.com/Checkend/checkend/$REF/src/core/recipes.ts"
+      - name: Check the commands
+        run: CHECKEND_RECIPES_TS="$RUNNER_TEMP/recipes.ts" go test -count=1 -run TestServerRecipesNameRealCommands -v ./internal/cli/
