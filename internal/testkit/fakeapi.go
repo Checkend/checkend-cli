@@ -2,6 +2,7 @@
 package testkit
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -50,6 +51,7 @@ type FakeAPI struct {
 	TestEvents map[string]bool
 	Reports    []string
 	MCPHeaders []http.Header
+	Uploads    []*Request
 	URL        string
 	Health     J
 	Ingest     J
@@ -328,6 +330,21 @@ func (f *FakeAPI) route(r *Request) *Reply {
 		return &Reply{Status: 201, Body: J{"data": out}}
 	case r.Method == "GET" && r.Path == "/v1/issues":
 		return f.listIssues(r)
+	case r.Method == "POST" && r.Path == "/v1/sourcemaps":
+		if r.ContentType != "application/x-checkend-sourcemap-index" && r.ContentType != "application/json" {
+			return &Reply{Status: 415, Body: J{"error": "unsupported_media_type"}}
+		}
+		if f.FindProject(r.Query.Get("project")) == nil {
+			return notFound("project_not_found")
+		}
+		if r.Query.Get("release") == "" || r.Query.Get("name") == "" {
+			return invalid("release")
+		}
+		if !bytes.HasPrefix(r.Raw, []byte("CKSI")) {
+			return &Reply{Status: 400, Body: J{"error": "invalid_sourcemap", "reason": "Not an index."}}
+		}
+		f.Uploads = append(f.Uploads, r)
+		return &Reply{Status: 201, Body: J{"data": J{"id": len(f.Uploads), "release": r.Query.Get("release"), "path": r.Query.Get("name"), "bytes": len(r.Raw)}}}
 	case r.Method == "POST" && r.Path == "/v1/deploys":
 		body, _ := r.Body.(J)
 		ref := fmt.Sprint(body["project"])

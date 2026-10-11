@@ -25,7 +25,8 @@ type Command struct {
 	// Details are the option lines of the help.
 	Details []string
 	Options map[string]Kind
-	// Args are the names of the positional arguments. A name in brackets is optional.
+	// Args are the names of the positional arguments. A name in brackets is optional; a last
+	// name like "[path...]" takes any number of arguments.
 	Args []string
 	Run  func(s *Session) error
 }

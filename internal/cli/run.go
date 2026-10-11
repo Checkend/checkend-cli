@@ -25,14 +25,15 @@ var globalOptions = map[string]Kind{
 // commands lists only commands whose server API exists (and so they are in --help).
 func commands() []*Command {
 	return slices.Concat(authCommands(), setupCommands(), []*Command{mcpCommand(), initCommand(), nextCommand(), deployCommand()},
-		issueCommands(), eventCommands(), projectCommands(), []*Command{dsnRotateCommand()})
+		issueCommands(), eventCommands(), projectCommands(), []*Command{dsnRotateCommand(), sourcemapsUploadCommand()})
 }
 
 var groups = map[string]string{
-	"issue":   "List and view issues",
-	"event":   "View an event",
-	"project": "Create, list and delete projects; print a DSN",
-	"dsn":     "Rotate the DSN of a project",
+	"issue":      "List and view issues",
+	"event":      "View an event",
+	"project":    "Create, list and delete projects; print a DSN",
+	"dsn":        "Rotate the DSN of a project",
+	"sourcemaps": "Upload source maps",
 }
 
 // Run runs `ce argv...` and returns the exit code.
@@ -150,7 +151,8 @@ func dispatch(argv []string, h *host.Host, out *output.Output) error {
 	if len(p.args) < required {
 		return clierr.UsageError(fmt.Sprintf("Missing %s.", command.Args[len(p.args)]), helpHint(command))
 	}
-	if len(p.args) > len(command.Args) {
+	variadic := len(command.Args) > 0 && strings.HasSuffix(command.Args[len(command.Args)-1], "...]")
+	if len(p.args) > len(command.Args) && !variadic {
 		return clierr.UsageError(fmt.Sprintf("Unexpected argument %q.", sanitize.OneLine(p.args[len(command.Args)])), helpHint(command))
 	}
 	return command.Run(&Session{Host: h, Out: out, Args: p.args, p: p})
