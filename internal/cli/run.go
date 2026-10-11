@@ -164,7 +164,8 @@ func helpHint(c *Command) string { return fmt.Sprintf("Run `%s --help`.", name(c
 
 func mainHelp() string {
 	seen := map[string]bool{}
-	var lines []string
+	var labels, summaries []string
+	width := 0
 	for _, c := range commands() {
 		head := c.Path[0]
 		if seen[head] {
@@ -175,7 +176,12 @@ func mainHelp() string {
 		if len(c.Path) > 1 {
 			summary, label = groups[head], head+" <action>"
 		}
-		lines = append(lines, fmt.Sprintf("  %-18s%s", label, summary))
+		labels, summaries = append(labels, label), append(summaries, summary)
+		width = max(width, len(label))
+	}
+	var lines []string
+	for i, label := range labels {
+		lines = append(lines, fmt.Sprintf("  %-*s  %s", width, label, summaries[i]))
 	}
 	return fmt.Sprintf(`Checkend CLI %s: error tracking for coding agents.
 

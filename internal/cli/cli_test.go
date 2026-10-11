@@ -149,3 +149,12 @@ func TestHelpShowsPlain(t *testing.T) {
 	_, cli, _ := setup(t)
 	Contains(t, cli.Run([]string{"--help"}).Stdout, "--plain")
 }
+
+func TestHelpKeepsTwoSpacesAfterEachCommandName(t *testing.T) {
+	_, cli, _ := setup(t)
+	for _, line := range strings.Split(commandsSection(cli.Run([]string{"--help"}).Stdout), "\n") {
+		if strings.TrimSpace(line) != "" {
+			Matches(t, line, `^  \S+( <action>)?\s{2,}\S`)
+		}
+	}
+}
