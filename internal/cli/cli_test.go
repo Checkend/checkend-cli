@@ -76,6 +76,9 @@ func TestATypoNeverDoesAnything(t *testing.T) {
 		{"project", "create"}, {"login", "--url"}, {"--json"}, {"brief", "1"}, {"token", "list"},
 		{"issue", "list", "--json=yes"}, {"issue", "list", "--limit", "--json"}, {"issue", "list", "-x"},
 		{"login", "--with-token=1"},
+		{"deploy", "extra"}, {"deploy", "--pr"}, {"dsn"}, {"dsn", "frob"}, {"dsn", "rotate", "x"},
+		{"project", "delete"}, {"project", "delete", "a", "b"}, {"setup", "report"},
+		{"setup", "report", "a", "b"}, {"mcp", "x"}, {"setup", "--bogus"},
 	}
 	for _, argv := range cases {
 		t.Run(strings.Join(argv, " "), func(t *testing.T) {

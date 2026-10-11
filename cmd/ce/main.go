@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"io"
 	"os"
+	"os/exec"
 	"os/signal"
 	"strings"
 	"time"
@@ -72,6 +73,13 @@ func readStdin() (string, error) {
 	return string(data), err
 }
 
+func git(dir string, args ...string) (string, error) {
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	return strings.TrimSpace(string(out)), err
+}
+
 func environ() map[string]string {
 	env := map[string]string{}
 	for _, kv := range os.Environ() {
@@ -98,6 +106,7 @@ func main() {
 		Stdin:       stdin,
 		Now:         time.Now,
 		Keyring:     credstore.System{},
+		Git:         git,
 	}
 	os.Exit(cli.Run(os.Args[1:], h))
 }

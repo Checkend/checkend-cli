@@ -9,7 +9,7 @@ import (
 )
 
 func projectCommands() []*Command {
-	return []*Command{projectListCommand(), projectCreateCommand(), projectDSNCommand()}
+	return []*Command{projectListCommand(), projectCreateCommand(), projectDSNCommand(), projectDeleteCommand()}
 }
 
 func projectListCommand() *Command {

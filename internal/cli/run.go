@@ -24,14 +24,15 @@ var globalOptions = map[string]Kind{
 
 // commands lists only commands whose server API exists (and so they are in --help).
 func commands() []*Command {
-	return slices.Concat(authCommands(), setupCommands(), []*Command{mcpCommand(), initCommand(), nextCommand()},
-		issueCommands(), eventCommands(), projectCommands())
+	return slices.Concat(authCommands(), setupCommands(), []*Command{mcpCommand(), initCommand(), nextCommand(), deployCommand()},
+		issueCommands(), eventCommands(), projectCommands(), []*Command{dsnRotateCommand()})
 }
 
 var groups = map[string]string{
 	"issue":   "List and view issues",
 	"event":   "View an event",
-	"project": "Create and list projects; print a DSN",
+	"project": "Create, list and delete projects; print a DSN",
+	"dsn":     "Rotate the DSN of a project",
 }
 
 // Run runs `ce argv...` and returns the exit code.

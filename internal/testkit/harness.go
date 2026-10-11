@@ -70,6 +70,8 @@ type Harness struct {
 	Repo    string
 	Keyring *credstore.Memory
 	Prompts []Prompt
+	// Git has the output of git commands, by their arguments ("rev-parse HEAD").
+	Git map[string]string
 }
 
 // NewHarness makes a home and a repo (with .git) in a temporary directory.
@@ -139,6 +141,12 @@ func (h *Harness) Run(argv []string, opts ...Options) Result {
 		HTTP:      nil,
 		Now:       func() time.Time { return time.Date(2026, 10, 10, 12, 0, 0, 0, time.UTC) },
 		Keyring:   h.Keyring,
+		Git: func(dir string, args ...string) (string, error) {
+			if out, ok := h.Git[strings.Join(args, " ")]; ok {
+				return out, nil
+			}
+			return "", fmt.Errorf("fatal: not a git repository")
+		},
 	}
 	code := cli.Run(argv, hst)
 	return Result{Code: code, Stdout: stdout.String(), Stderr: stderr.String(), All: all.String()}

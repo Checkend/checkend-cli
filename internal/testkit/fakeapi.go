@@ -328,6 +328,53 @@ func (f *FakeAPI) route(r *Request) *Reply {
 		return &Reply{Status: 201, Body: J{"data": out}}
 	case r.Method == "GET" && r.Path == "/v1/issues":
 		return f.listIssues(r)
+	case r.Method == "POST" && r.Path == "/v1/deploys":
+		body, _ := r.Body.(J)
+		ref := fmt.Sprint(body["project"])
+		if f.FindProject(ref) == nil {
+			return notFound("project_not_found")
+		}
+		if c, _ := body["commit"].(string); !regexp.MustCompile(`^[0-9a-f]{7,40}$`).MatchString(c) {
+			return invalid("commit")
+		}
+		out := J{"id": 1, "project_id": f.FindProject(ref)["id"], "commit": body["commit"], "release": body["release"], "environment": body["environment"]}
+		if out["release"] == nil {
+			out["release"] = body["commit"]
+		}
+		if out["environment"] == nil {
+			out["environment"] = "production"
+		}
+		return &Reply{Status: 201, Body: J{"data": out}}
+	}
+	if m := regexp.MustCompile(`^/v1/projects/([^/]+)(/keys(?:/([^/]+))?)?$`).FindStringSubmatch(r.Path); m != nil {
+		project := f.FindProject(m[1])
+		if project == nil {
+			return notFound("not_found")
+		}
+		dsns := project["dsns"].([]any)
+		switch {
+		case r.Method == "DELETE" && m[2] == "":
+			f.Projects = slices.DeleteFunc(f.Projects, func(p J) bool { return fmt.Sprint(p["id"]) == fmt.Sprint(project["id"]) })
+			return &Reply{Status: 204}
+		case r.Method == "POST" && m[2] == "/keys" && m[3] == "":
+			key := fmt.Sprintf("rotated%d", len(dsns)+1)
+			host := strings.TrimPrefix(f.URL, "http://")
+			d := fmt.Sprintf("http://%s@%s/%v", key, host, project["id"])
+			project["dsns"] = append(dsns, d)
+			return &Reply{Status: 201, Body: J{"data": J{"public_key": key, "project_id": project["id"], "created_at": "2026-10-10T12:00:00.000Z", "dsn": d}}}
+		case r.Method == "DELETE" && m[3] != "":
+			for i, d := range dsns {
+				u, _ := url.Parse(d.(string))
+				if u.User.Username() == m[3] {
+					if len(dsns) == 1 {
+						return &Reply{Status: 409, Body: J{"error": "last_key", "message": "Add a new key first; the only active key is not revoked."}}
+					}
+					project["dsns"] = slices.Delete(slices.Clone(dsns), i, i+1)
+					return &Reply{Status: 204}
+				}
+			}
+			return notFound("not_found")
+		}
 	}
 	if m := regexp.MustCompile(`^/v1/issues/(\d+)(/events)?$`).FindStringSubmatch(r.Path); m != nil && r.Method == "GET" {
 		id, _ := strconv.Atoi(m[1])

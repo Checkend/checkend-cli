@@ -28,8 +28,10 @@ type Host struct {
 	Prompt      func(question string, secret bool) (string, error)
 	ReadStdin   func() (string, error)
 	// Stdin is the input as a stream, for `ce mcp`.
-	Stdin   io.Reader
-	HTTP    *http.Client
+	Stdin io.Reader
+	HTTP  *http.Client
+	// Git runs git in dir and returns its trimmed output.
+	Git     func(dir string, args ...string) (string, error)
 	Now     func() time.Time
 	Keyring credstore.Keyring
 }
