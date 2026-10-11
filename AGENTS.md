@@ -82,4 +82,7 @@ test/
 - Sign off every commit (Developer Certificate of Origin): `git commit -s`. CI checks it.
 - Run `git config core.hooksPath .githooks` once per clone. The pre-commit hook blocks private
   planning files.
+- Install [gitleaks](https://github.com/gitleaks/gitleaks) (`brew install gitleaks`): the
+  pre-commit hook scans the staged changes for secrets, and CI scans the full history. A fake
+  secret in a test must contain `test` or `example`.
 - Security problems: see [SECURITY.md](SECURITY.md). Do not open a public issue.

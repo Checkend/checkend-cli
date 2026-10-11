@@ -143,7 +143,9 @@ back with `ce next`, `ce issue list`, `ce issue view` and `ce event view`.
 
 ## Contributing
 
-Read [AGENTS.md](AGENTS.md) first. Sign off each commit (`git commit -s`). For security
+Read [AGENTS.md](AGENTS.md) first. Sign off each commit (`git commit -s`). Install
+[gitleaks](https://github.com/gitleaks/gitleaks) for the pre-commit secret scan; a fake secret in
+a test must contain `test` or `example`. For security
 problems, see [SECURITY.md](SECURITY.md).
 
 ## License
