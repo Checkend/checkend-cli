@@ -1,7 +1,9 @@
 package cli_test
 
 // End-to-end test against a running Checkend server, for example `wrangler dev`. It runs only
-// when CHECKEND_E2E_URL and CHECKEND_E2E_TOKEN are set. See README.md.
+// when CHECKEND_E2E_URL and CHECKEND_E2E_TOKEN are set. See README.md. With
+// CHECKEND_E2E_BASE_PATH (for example /k7q2x9), the CLI reaches the server through a front stub
+// that serves it under that base path only, as a hosted install.
 
 import (
 	"bytes"
@@ -11,6 +13,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
+	"net/http/httputil"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -26,6 +30,9 @@ func TestEndToEnd(t *testing.T) {
 	base, token := os.Getenv("CHECKEND_E2E_URL"), os.Getenv("CHECKEND_E2E_TOKEN")
 	if base == "" || token == "" {
 		t.Skip("set CHECKEND_E2E_URL and CHECKEND_E2E_TOKEN")
+	}
+	if path := os.Getenv("CHECKEND_E2E_BASE_PATH"); path != "" {
+		base = basePathFront(t, base, path)
 	}
 	cli := NewHarness(t)
 	login := cli.Run([]string{"login", "--url", base, "--with-token"}, Options{Stdin: token})
@@ -62,7 +69,7 @@ func TestEndToEnd(t *testing.T) {
 		}}}}},
 		"tags": J{"suite": "cli-e2e"},
 	})
-	req, _ := http.NewRequest("POST", base+"/api"+parsed.Path+"/store/", bytes.NewReader(body))
+	req, _ := http.NewRequest("POST", IngestURL(parsed, "store"), bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Sentry-Auth", "Sentry sentry_version=7, sentry_key="+parsed.User.Username()+", sentry_client=checkend-cli-e2e/1.0")
 	resp, err := http.DefaultClient.Do(req)
@@ -177,4 +184,47 @@ func TestEndToEnd(t *testing.T) {
 	del := cli.Run([]string{"project", "delete", jsonString(project["id"]), "--yes"})
 	Code(t, del, 0)
 	Code(t, cli.Run([]string{"project", "dsn", jsonString(project["id"])}), 3)
+}
+
+// basePathFront serves the server at upstream under path, as the front Worker of a hosted
+// install does: requests outside the path get 404 and fail the test. The server has no base path
+// in self-host mode, so the stub puts it into the absolute URLs of the answers (DSNs, MCP, steps).
+func basePathFront(t *testing.T, upstream, path string) string {
+	target, err := url.Parse(upstream)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var front *httptest.Server
+	proxy := &httputil.ReverseProxy{Rewrite: func(r *httputil.ProxyRequest) {
+		r.SetURL(target)
+		r.Out.Host = target.Host
+		r.Out.Header.Del("Accept-Encoding")
+	}}
+	proxy.ModifyResponse = func(resp *http.Response) error {
+		if strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream") {
+			return nil
+		}
+		data, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return err
+		}
+		data = bytes.ReplaceAll(data, []byte(target.Host), []byte(strings.TrimPrefix(front.URL, "http://")+path))
+		resp.Body = io.NopCloser(bytes.NewReader(data))
+		resp.ContentLength = int64(len(data))
+		resp.Header.Set("Content-Length", strconv.Itoa(len(data)))
+		return nil
+	}
+	front = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rest, ok := strings.CutPrefix(r.URL.Path, path)
+		if !ok || (rest != "" && !strings.HasPrefix(rest, "/")) {
+			t.Errorf("a request outside the base path: %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+			return
+		}
+		r.URL.Path, r.URL.RawPath = rest, ""
+		proxy.ServeHTTP(w, r)
+	}))
+	t.Cleanup(front.Close)
+	return front.URL + path
 }

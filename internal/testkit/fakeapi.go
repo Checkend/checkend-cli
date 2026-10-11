@@ -54,19 +54,24 @@ type FakeAPI struct {
 	Reports    []string
 	MCPHeaders []http.Header
 	Uploads    []*Request
-	URL        string
-	Health     J
-	Ingest     J
-	Projects   []J
-	Issues     []J
-	Events     []J
-	Override   func(r *Request) *Reply
+	// URL is the origin plus the base path. Origin is without the base path.
+	URL    string
+	Origin string
+	// Outside are the requests outside the base path (the fake answers 404).
+	Outside  []*Request
+	Health   J
+	Ingest   J
+	Projects []J
+	Issues   []J
+	Events   []J
+	Override func(r *Request) *Reply
 
 	mu       sync.Mutex
 	requests []*Request
 	server   *httptest.Server
 	nextID   int64
 	routes   []route
+	base     string
 }
 
 type route struct {
@@ -76,8 +81,13 @@ type route struct {
 }
 
 // NewFakeAPI starts a fake on 127.0.0.1. It stops at the end of the test.
-func NewFakeAPI(t testing.TB) *FakeAPI {
+func NewFakeAPI(t testing.TB) *FakeAPI { return NewFakeAPIAt(t, "") }
+
+// NewFakeAPIAt starts a fake that serves under a base path ("/k7q2x9"), as a hosted install.
+// Requests outside the base path get 404 and go to Outside.
+func NewFakeAPIAt(t testing.TB, base string) *FakeAPI {
 	f := &FakeAPI{
+		base:       base,
 		Token:      "ce_test_token_0123456789",
 		SetupKey:   "cks_test_setup_key_0123456789abcdef",
 		TestEvents: map[string]bool{},
@@ -94,7 +104,8 @@ func NewFakeAPI(t testing.TB) *FakeAPI {
 		nextID:   4817305926,
 	}
 	f.server = httptest.NewServer(http.HandlerFunc(f.serve))
-	f.URL = f.server.URL
+	f.Origin = f.server.URL
+	f.URL = f.server.URL + base
 	f.SetupMD = "# Set up Checkend error tracking\n\nCheckend (" + f.URL + ") receives errors from Sentry SDKs.\n\n## 3. Install the Sentry SDK\n\nInstall the official Sentry SDK.\n"
 	t.Cleanup(f.Stop)
 	return f
@@ -234,6 +245,19 @@ func (f *FakeAPI) serve(w http.ResponseWriter, req *http.Request) {
 		if json.Unmarshal(raw, &r.Body) != nil {
 			r.Body = string(raw)
 		}
+	}
+	if f.base != "" {
+		path, ok := strings.CutPrefix(r.Path, f.base)
+		if !ok || (path != "" && !strings.HasPrefix(path, "/")) {
+			f.mu.Lock()
+			f.Outside = append(f.Outside, r)
+			f.mu.Unlock()
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(404)
+			_, _ = io.WriteString(w, `{"error":"not_found"}`)
+			return
+		}
+		r.Path = path
 	}
 	f.mu.Lock()
 	f.requests = append(f.requests, r)
@@ -587,4 +611,12 @@ func (f *FakeAPI) mcp(r *Request) *Reply {
 		return &Reply{Status: 202}
 	}
 	return &Reply{Status: 200, Body: J{"jsonrpc": "2.0", "id": msg["id"], "result": J{"echo": msg["method"]}}}
+}
+
+// IngestURL is the URL where a Sentry SDK sends events for a DSN: the path of the DSN without
+// its last segment (the base path of a hosted install), then /api/<project>/<endpoint>/.
+func IngestURL(dsn *url.URL, endpoint string) string {
+	path := strings.TrimSuffix(dsn.Path, "/")
+	i := strings.LastIndex(path, "/")
+	return dsn.Scheme + "://" + dsn.Host + path[:i] + "/api/" + path[i+1:] + "/" + endpoint + "/"
 }

@@ -115,14 +115,15 @@ commands come when the server API for them exists. `ce --help` shows only the co
 
 | Option | Environment | Meaning |
 |---|---|---|
-| `--url <url>` | `CHECKEND_URL` | The Checkend instance |
+| `--url <url>` | `CHECKEND_URL` | The Checkend instance; it can have a base path (`https://host.example/k7q2x9`) |
 | `--token <token>` | `CHECKEND_TOKEN` (or `CHECKEND_ADMIN_TOKEN`) | The API token |
 | `--json` | | Print JSON, also on a terminal |
 | `--plain` | | Print text, also when stdout is not a terminal (`--json` wins) |
 
 The CLI looks for settings in this order: flags, environment, `.checkend.json` (the project only,
 found in the current directory or a parent up to the repo root), then the saved login. A saved
-token goes only to the URL that it was saved for.
+token goes only to the URL that it was saved for. With a base path, that is the full URL: two
+instances under one host never share a token.
 
 ## Output and exit codes
 
@@ -179,6 +180,10 @@ CHECKEND_E2E_URL=http://127.0.0.1:8799 CHECKEND_E2E_TOKEN=e2e-test-admin-token-0
 
 The server needs an `ADMIN_TOKEN` of at least 32 characters. The test logs in, runs `ce init`, sends one error to the DSN as a Sentry SDK does, and reads it
 back with `ce next`, `ce issue list`, `ce issue view` and `ce event view`.
+
+A hosted Checkend lives under a base path (`https://host/<id>`). To test that, add
+`CHECKEND_E2E_BASE_PATH=/k7q2x9`: the test then reaches the server through a front stub that
+serves it only under that path, and it fails on any request outside the path.
 
 ## Contributing
 
