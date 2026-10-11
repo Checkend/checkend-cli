@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -89,8 +90,9 @@ func TestInstallDockerWritesAComposeFileAndASecretEnvFile(t *testing.T) {
 	Matches(t, env["ENCRYPTION_KEYS"], `^k1:[A-Za-z0-9+/]{43}=$`)
 	Matches(t, env["SETUP_CODE"], `^1791633600\.[A-Za-z0-9_-]{43}$`)
 	Equal(t, env["PUBLIC_URL"], "http://localhost:8787")
-	info, _ := os.Stat(filepath.Join(dir, ".env"))
-	Equal(t, info.Mode().Perm(), os.FileMode(0o600))
+	if info, _ := os.Stat(filepath.Join(dir, ".env")); runtime.GOOS != "windows" {
+		Equal(t, info.Mode().Perm(), os.FileMode(0o600))
+	}
 	noSecrets(t, r, env)
 
 	out := r.JSON(t)
