@@ -41,6 +41,8 @@ type Host struct {
 	// Run runs a program (ssh, ssh-keyscan, docker) with stdin and returns its stdout. Tests
 	// fake it.
 	Run func(stdin []byte, name string, args ...string) ([]byte, error)
+	// LookupHost resolves a host name to its addresses.
+	LookupHost func(name string) ([]string, error)
 }
 
 // Getenv returns an environment variable, or "".

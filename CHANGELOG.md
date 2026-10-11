@@ -38,6 +38,11 @@ The first release. Nothing is tagged or published yet. Until then, build `ce` fr
   the image is pinned by its digest, with a volume, restarts and a nightly backup. It shows the
   plan and asks first (`--yes` for agents), keeps the secrets when it runs again, saves the admin
   token in the keychain, and prints the setup link. It never prints a secret.
+- `ce install ssh <user@host> --domain <domain>` installs Checkend on an Ubuntu or Debian LTS
+  server with the SSH agent. It verifies the SSH host key (from `known_hosts`, `--host-key` or
+  a confirmation; never skipped), installs Docker from Docker's apt repository (key fingerprint
+  checked), and starts Checkend behind Caddy (the domain must point at the server) or a
+  Cloudflare Tunnel (`--tunnel`). Secrets go to the server only through stdin.
 - Install methods for the first release: Homebrew, `install.sh` and the npm wrapper
   `@checkend/cli`. Each one checks the SHA-256 of the binary.
 

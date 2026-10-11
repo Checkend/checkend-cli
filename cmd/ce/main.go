@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"bytes"
 	"io"
+	"net"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -117,6 +118,7 @@ func main() {
 		Keyring:     credstore.System{},
 		Git:         git,
 		Run:         run,
+		LookupHost:  net.LookupHost,
 	}
 	os.Exit(cli.Run(os.Args[1:], h))
 }

@@ -121,6 +121,10 @@ func (f *FakeReleases) Publish(version string, change ...func(m map[string]any))
 			"crons": []any{"*/5 * * * *"}, "observability": true},
 		"image": map[string]any{"repository": "ghcr.io/checkend/checkend", "tag": version,
 			"digest": "sha256:" + Sum([]byte("image "+version)), "platforms": []any{"linux/amd64", "linux/arm64"}},
+		"proxies": map[string]any{
+			"caddy":       "docker.io/library/caddy@sha256:" + Sum([]byte("caddy")),
+			"cloudflared": "docker.io/cloudflare/cloudflared@sha256:" + Sum([]byte("cloudflared")),
+		},
 		"settings": map[string]any{
 			"ADMIN_TOKEN":     map[string]any{"secret": true, "min_length": 32},
 			"SETUP_CODE":      map[string]any{"secret": true, "format": "<unix seconds>.<code>"},

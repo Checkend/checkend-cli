@@ -120,11 +120,17 @@ func TestRefusesAManifestThatThisCLICannotUse(t *testing.T) {
 		"default value": func(m map[string]any) {
 			m["settings"].(map[string]any)["ADMIN_TOKEN"].(map[string]any)["default"] = "x"
 		},
-		"asset name":         func(m map[string]any) { m["worker"].(map[string]any)["asset"] = "../worker.tar.gz" },
-		"sha256":             func(m map[string]any) { m["worker"].(map[string]any)["sha256"] = "abc" },
-		"version":            func(m map[string]any) { m["version"] = "latest" },
-		"main module":        func(m map[string]any) { m["worker"].(map[string]any)["main_module"] = "other.js" },
-		"migration name":     func(m map[string]any) { m["migrations"].(map[string]any)["latest"] = "../x.sql" },
+		"asset name":     func(m map[string]any) { m["worker"].(map[string]any)["asset"] = "../worker.tar.gz" },
+		"sha256":         func(m map[string]any) { m["worker"].(map[string]any)["sha256"] = "abc" },
+		"version":        func(m map[string]any) { m["version"] = "latest" },
+		"main module":    func(m map[string]any) { m["worker"].(map[string]any)["main_module"] = "other.js" },
+		"migration name": func(m map[string]any) { m["migrations"].(map[string]any)["latest"] = "../x.sql" },
+		"proxy image": func(m map[string]any) {
+			m["proxies"].(map[string]any)["caddy"] = "docker.io/evil/caddy@sha256:" + strings.Repeat("a", 64)
+		},
+		"proxy image ": func(m map[string]any) {
+			m["proxies"].(map[string]any)["nginx"] = "docker.io/library/nginx@sha256:" + strings.Repeat("a", 64)
+		},
 		"compatibility date": func(m map[string]any) { m["worker"].(map[string]any)["compatibility_date"] = "soon" },
 	} {
 		f := NewFakeReleases(t)

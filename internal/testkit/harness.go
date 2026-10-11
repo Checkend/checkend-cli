@@ -77,6 +77,8 @@ type Harness struct {
 	// Exec fakes the programs that the CLI runs (ssh, docker). Calls records each call.
 	Exec  func(stdin []byte, name string, args ...string) ([]byte, error)
 	Calls []Call
+	// DNS answers host lookups.
+	DNS map[string][]string
 }
 
 // Call is one program that the CLI ran.
@@ -169,6 +171,12 @@ func (h *Harness) Run(argv []string, opts ...Options) Result {
 			return nil, fmt.Errorf("%s: not found", name)
 		}
 		return h.Exec(stdin, name, args...)
+	}
+	hst.LookupHost = func(name string) ([]string, error) {
+		if addrs, ok := h.DNS[name]; ok {
+			return addrs, nil
+		}
+		return nil, fmt.Errorf("lookup %s: no such host", name)
 	}
 	code := cli.Run(argv, hst)
 	return Result{Code: code, Stdout: stdout.String(), Stderr: stderr.String(), All: all.String()}

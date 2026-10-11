@@ -136,6 +136,15 @@ type Manifest struct {
 	} `json:"worker"`
 	Image    Image              `json:"image"`
 	Settings map[string]Setting `json:"settings"`
+	// Proxies are the pinned images of the HTTPS proxies of `ce install ssh` (optional):
+	// "caddy" and "cloudflared".
+	Proxies map[string]string `json:"proxies,omitempty"`
+}
+
+// ProxyRepositories are the only repositories that a proxy image can have.
+var ProxyRepositories = map[string]string{
+	"caddy":       "docker.io/library/caddy",
+	"cloudflared": "docker.io/cloudflare/cloudflared",
 }
 
 // Image is the Docker image of the release.
@@ -328,6 +337,12 @@ func (s Source) check(m *Manifest) error {
 	}
 	if !digestPattern.MatchString(m.Image.Digest) {
 		return fail("The manifest has no valid image digest.")
+	}
+	for name, ref := range m.Proxies {
+		repo, digest, ok := strings.Cut(ref, "@")
+		if want, known := ProxyRepositories[name]; !known || !ok || repo != want || !digestPattern.MatchString(digest) {
+			return fail("The manifest has an invalid proxy image %q.", name)
+		}
 	}
 	return nil
 }

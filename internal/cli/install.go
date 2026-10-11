@@ -21,7 +21,7 @@ import (
 // the setup link of the web UI.
 
 func installCommands() []*Command {
-	return []*Command{installDockerCommand()}
+	return []*Command{installDockerCommand(), installSSHCommand()}
 }
 
 // releaseSource is the source of the server releases (tests replace it through the host).
