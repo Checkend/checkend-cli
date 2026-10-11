@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
@@ -48,7 +49,8 @@ func TestEndToEnd(t *testing.T) {
 
 	// Send one error, as a Sentry SDK does.
 	parsed, _ := url.Parse(dsn)
-	message := "e2e boom " + name
+	// The server scrubs long numbers in messages, so the message has a base-36 suffix.
+	message := "e2e boom " + strconv.FormatInt(time.Now().UnixNano(), 36)
 	id := make([]byte, 16)
 	_, _ = rand.Read(id)
 	body, _ := json.Marshal(J{
