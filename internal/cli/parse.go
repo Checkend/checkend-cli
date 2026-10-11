@@ -17,6 +17,13 @@ const (
 	List
 )
 
+// usageMessage is a parse error. Its text is a sentence for the user.
+type usageMessage string
+
+func (m usageMessage) Error() string { return string(m) }
+
+func usagef(format string, args ...any) error { return usageMessage(fmt.Sprintf(format, args...)) }
+
 type parsed struct {
 	values map[string]string
 	lists  map[string][]string
@@ -40,22 +47,22 @@ func parse(argv []string, options map[string]Kind) (parsed, error) {
 			name, value, hasValue := strings.Cut(arg[2:], "=")
 			kind, ok := options[name]
 			if !ok || name == "" {
-				return p, fmt.Errorf("Unknown option '--%s'.", name)
+				return p, usagef("Unknown option '--%s'.", name)
 			}
 			if kind == Bool {
 				if hasValue {
-					return p, fmt.Errorf("Option '--%s' does not take a value.", name)
+					return p, usagef("Option '--%s' does not take a value.", name)
 				}
 				p.bools[name] = true
 				continue
 			}
 			if !hasValue {
 				if i+1 >= len(argv) {
-					return p, fmt.Errorf("Option '--%s <value>' needs a value.", name)
+					return p, usagef("Option '--%s <value>' needs a value.", name)
 				}
 				value = argv[i+1]
 				if len(value) > 1 && strings.HasPrefix(value, "-") {
-					return p, fmt.Errorf("Option '--%s' needs a value, not %q. For a value that starts with a dash, use --%s=%s.", name, value, name, value)
+					return p, usagef("Option '--%s' needs a value, not %q. For a value that starts with a dash, use --%s=%s.", name, value, name, value)
 				}
 				i++
 			}
@@ -64,7 +71,7 @@ func parse(argv []string, options map[string]Kind) (parsed, error) {
 			}
 			p.values[name] = value
 		case len(arg) > 1 && strings.HasPrefix(arg, "-"):
-			return p, fmt.Errorf("Unknown option '%s'.", arg)
+			return p, usagef("Unknown option '%s'.", arg)
 		default:
 			p.args = append(p.args, arg)
 		}

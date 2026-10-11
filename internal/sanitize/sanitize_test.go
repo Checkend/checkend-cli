@@ -28,7 +28,7 @@ func TestCleanTextRemovesControlsButKeepsNewlinesAndTabs(t *testing.T) {
 		"a\x00b\x07c\x08d\re\x7ff": "abcdef",
 		"a\u009b31mb\u0085c":       "a31mbc",
 		"line1\nline2\tx":          "line1\nline2\tx",
-		"a‮b⁦c⁩d":                  "abcd",
+		"a\u202eb\u2066c\u2069d":   "abcd",
 		"a\x9bb":                   "a�b", // a raw C1 byte is not valid UTF-8
 	}
 	for in, want := range cases {
@@ -54,13 +54,13 @@ func TestDeepCleansEveryStringAndKey(t *testing.T) {
 }
 
 func TestJSONKeepsTheValueButEscapesControlAndBidiCharacters(t *testing.T) {
-	value := map[string]any{"m": "a\x1b[31mb\u009bc‮d e\nok<&>"}
+	value := map[string]any{"m": "a\x1b[31mb\u009bc\u202ed\u2028e\nok<&>"}
 	text := string(JSON(value))
 	var back any
 	if err := json.Unmarshal([]byte(text), &back); err != nil || !reflect.DeepEqual(back, value) {
 		t.Fatalf("round trip: %v %#v", err, back)
 	}
-	if regexp.MustCompile("[\x00-\x09\x0b-\x1f\u007f-\u009f  ‪-‮⁦-⁩]").MatchString(text) {
+	if regexp.MustCompile("[\x00-\x09\x0b-\x1f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]").MatchString(text) {
 		t.Errorf("unsafe character in %q", text)
 	}
 	if !regexp.MustCompile(`<&>`).MatchString(text) {
@@ -69,7 +69,7 @@ func TestJSONKeepsTheValueButEscapesControlAndBidiCharacters(t *testing.T) {
 }
 
 func TestIndentKeepsKeyOrderAndNumbers(t *testing.T) {
-	raw := []byte(`{"z":1,"a":{"big":12345678901234567890,"s":"\u001b x` + "‮" + `"}}`)
+	raw := []byte(`{"z":1,"a":{"big":12345678901234567890,"s":"\u001b x` + "\u202e" + `"}}`)
 	got := string(Indent(raw))
 	want := "{\n  \"z\": 1,\n  \"a\": {\n    \"big\": 12345678901234567890,\n    \"s\": \"\\u001b x\\u202e\"\n  }\n}"
 	if got != want {
