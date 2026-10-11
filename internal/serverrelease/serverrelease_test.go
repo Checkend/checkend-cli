@@ -1,0 +1,180 @@
+package serverrelease_test
+
+import (
+	"crypto/ed25519"
+	"crypto/rand"
+	"strings"
+	"testing"
+
+	"github.com/Checkend/checkend-cli/internal/clierr"
+	"github.com/Checkend/checkend-cli/internal/serverrelease"
+	. "github.com/Checkend/checkend-cli/internal/testkit"
+)
+
+func source(f *FakeReleases) serverrelease.Source {
+	return serverrelease.Source{API: f.API, Keys: f.PublicKeys(), CLIVersion: "0.2.0"}
+}
+
+func failsWith(t *testing.T, err error, part string) {
+	t.Helper()
+	if err == nil || !strings.Contains(err.Error(), part) {
+		t.Fatalf("error %v; want %q", err, part)
+	}
+}
+
+func TestNoReleaseIsPublishedYet(t *testing.T) {
+	f := NewFakeReleases(t)
+	_, err := source(f).Latest()
+	failsWith(t, err, "No Checkend server release is published yet")
+	Equal(t, clierr.CodeOf(err), clierr.Failure)
+	// A release without a manifest (an old tag, or a release that is not done) is not one.
+	r := f.Publish("0.1.0")
+	delete(r.Assets, "checkend-release.json")
+	_, err = source(f).Latest()
+	failsWith(t, err, "No Checkend server release is published yet")
+}
+
+func TestLatestSkipsDraftsAndPrereleases(t *testing.T) {
+	f := NewFakeReleases(t)
+	f.Publish("0.1.0")
+	f.Publish("0.2.0").Draft = true
+	f.Publish("0.3.0-rc.1").Prerelease = true
+	r, err := source(f).Latest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	Equal(t, r.Manifest.Version, "0.1.0")
+	Equal(t, r.Manifest.Image.Ref(), "ghcr.io/checkend/checkend@"+r.Manifest.Image.Digest)
+	Equal(t, r.Manifest.Worker.Bindings[1], serverrelease.Binding{Type: "r2", Name: "BLOBS", Required: false})
+}
+
+func TestGetAVersion(t *testing.T) {
+	f := NewFakeReleases(t)
+	f.Publish("0.1.0")
+	f.Publish("0.2.0")
+	for _, v := range []string{"0.1.0", "v0.1.0"} {
+		r, err := source(f).Get(v)
+		if err != nil {
+			t.Fatal(err)
+		}
+		Equal(t, r.Manifest.Version, "0.1.0")
+	}
+	_, err := source(f).Get("9.9.9")
+	failsWith(t, err, "No Checkend server release v9.9.9")
+	_, err = source(f).Get("../x")
+	Equal(t, clierr.CodeOf(err), clierr.Usage)
+}
+
+func TestTheSignatureIsCheckedBeforeTheManifestIsRead(t *testing.T) {
+	f := NewFakeReleases(t)
+	r := f.Publish("0.1.0")
+	r.Assets["checkend-release.json"] = []byte(`{"format": 1, "version": "0.1.0", "evil": `)
+	_, err := source(f).Latest()
+	failsWith(t, err, "signature")
+
+	r = f.Publish("0.2.0")
+	r.Assets["checkend-release.json"] = append(r.Assets["checkend-release.json"], ' ')
+	_, err = source(f).Latest()
+	failsWith(t, err, "signature")
+
+	r = f.Publish("0.3.0")
+	delete(r.Assets, "checkend-release.json.sig")
+	_, err = source(f).Latest()
+	failsWith(t, err, "no signature")
+
+	_, other, _ := ed25519.GenerateKey(rand.Reader)
+	r = f.Publish("0.4.0")
+	r.Assets["checkend-release.json.sig"] = f.Signature(r.Assets["checkend-release.json"], other, f.KeyID)
+	_, err = source(f).Latest()
+	failsWith(t, err, "signature")
+
+	r = f.Publish("0.5.0")
+	r.Assets["checkend-release.json.sig"] = f.Signature(r.Assets["checkend-release.json"], other, "unknown-key")
+	_, err = source(f).Latest()
+	failsWith(t, err, `unknown key "unknown-key"`)
+
+	s := source(f)
+	s.Keys = nil
+	f.Publish("0.6.0")
+	_, err = s.Latest()
+	failsWith(t, err, "unknown key")
+}
+
+func TestTheManifestMustMatchTheGitHubRelease(t *testing.T) {
+	f := NewFakeReleases(t)
+	f.Publish("0.1.0", func(m map[string]any) { m["tag"] = "v0.0.9" })
+	_, err := source(f).Latest()
+	failsWith(t, err, "tag")
+
+	f.Publish("0.2.0", func(m map[string]any) { m["commit"] = strings.Repeat("f", 40) })
+	_, err = source(f).Latest()
+	failsWith(t, err, "commit")
+}
+
+func TestRefusesAManifestThatThisCLICannotUse(t *testing.T) {
+	for part, change := range map[string]func(m map[string]any){
+		"newer ce":          func(m map[string]any) { m["format"] = 2 },
+		"ce 9.0.0 or later": func(m map[string]any) { m["min_cli_version"] = "9.0.0" },
+		"image digest":      func(m map[string]any) { m["image"].(map[string]any)["digest"] = "latest" },
+		"image repository":  func(m map[string]any) { m["image"].(map[string]any)["repository"] = "docker.io/evil/checkend" },
+		"default value": func(m map[string]any) {
+			m["settings"].(map[string]any)["ADMIN_TOKEN"].(map[string]any)["default"] = "x"
+		},
+		"asset name":         func(m map[string]any) { m["worker"].(map[string]any)["asset"] = "../worker.tar.gz" },
+		"sha256":             func(m map[string]any) { m["worker"].(map[string]any)["sha256"] = "abc" },
+		"version":            func(m map[string]any) { m["version"] = "latest" },
+		"main module":        func(m map[string]any) { m["worker"].(map[string]any)["main_module"] = "other.js" },
+		"migration name":     func(m map[string]any) { m["migrations"].(map[string]any)["latest"] = "../x.sql" },
+		"compatibility date": func(m map[string]any) { m["worker"].(map[string]any)["compatibility_date"] = "soon" },
+	} {
+		f := NewFakeReleases(t)
+		f.Publish("0.1.0", change)
+		_, err := source(f).Latest()
+		if err == nil || !strings.Contains(err.Error(), part) {
+			t.Errorf("%s: %v", part, err)
+		}
+	}
+}
+
+func TestFetchChecksTheSizeAndTheChecksum(t *testing.T) {
+	f := NewFakeReleases(t)
+	pub := f.Publish("0.1.0")
+	r, err := source(f).Latest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	files, err := r.Files(r.Manifest.Migrations.Asset)
+	if err != nil {
+		t.Fatal(err)
+	}
+	Equal(t, len(files), 2)
+	Equal(t, string(files["migrations/0001_init.sql"]), Migrations["migrations/0001_init.sql"])
+
+	name := r.Manifest.Worker.Asset.Name
+	changed := append([]byte(nil), pub.Assets[name]...)
+	changed[len(changed)-1] ^= 0xff
+	pub.Assets[name] = changed
+	_, err = r.Fetch(r.Manifest.Worker.Asset)
+	failsWith(t, err, "checksum")
+	pub.Assets[name] = append(pub.Assets[name], 0)
+	_, err = r.Fetch(r.Manifest.Worker.Asset)
+	failsWith(t, err, "size")
+}
+
+func TestFilesRefusesUnsafeArchives(t *testing.T) {
+	for _, name := range []string{"../evil.sql", "/etc/passwd", "migrations/../../x"} {
+		f := NewFakeReleases(t)
+		bad := TarGz(map[string]string{name: "x"})
+		pub := f.Publish("0.1.0", func(m map[string]any) {
+			mig := m["migrations"].(map[string]any)
+			mig["sha256"], mig["size"] = Sum(bad), len(bad)
+		})
+		pub.Assets[pub.Manifest["migrations"].(map[string]any)["asset"].(string)] = bad
+		r, err := source(f).Latest()
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = r.Files(r.Manifest.Migrations.Asset)
+		failsWith(t, err, "unsafe")
+	}
+}
