@@ -7,7 +7,6 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -17,6 +16,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/Checkend/checkend-cli/internal/sshsig"
 )
 
 // FakeReleases is a fake of the GitHub releases API of the server repo. Each release has a
@@ -62,9 +63,9 @@ func NewFakeReleases(t testing.TB) *FakeReleases {
 	return f
 }
 
-// PublicKeys are the trusted keys for the CLI: key ID to the raw public key.
-func (f *FakeReleases) PublicKeys() map[string][]byte {
-	return map[string][]byte{f.KeyID: f.Key.Public().(ed25519.PublicKey)}
+// PublicKeys are the trusted keys for the CLI: key ID to "ssh-ed25519 AAAA…".
+func (f *FakeReleases) PublicKeys() map[string]string {
+	return map[string]string{f.KeyID: sshsig.AuthorizedKey(f.Key.Public().(ed25519.PublicKey))}
 }
 
 // Migrations are the migration files of a fake release.
@@ -147,14 +148,7 @@ func (f *FakeReleases) Publish(version string, change ...func(m map[string]any))
 func (f *FakeReleases) Sign(r *FakeRelease) {
 	data, _ := json.MarshalIndent(r.Manifest, "", "  ")
 	r.Assets["checkend-release.json"] = data
-	r.Assets["checkend-release.json.sig"] = f.Signature(data, f.Key, f.KeyID)
-}
-
-// Signature is a .sig file for data.
-func (f *FakeReleases) Signature(data []byte, key ed25519.PrivateKey, keyID string) []byte {
-	sig, _ := json.Marshal(map[string]any{"format": 1, "key_id": keyID,
-		"signature": base64.StdEncoding.EncodeToString(ed25519.Sign(key, data))})
-	return sig
+	r.Assets["checkend-release.json.sig"] = sshsig.Sign(f.Key, data, "checkend-server-release")
 }
 
 func (f *FakeReleases) release(tag string) *FakeRelease {

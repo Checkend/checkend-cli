@@ -8,6 +8,7 @@ import (
 
 	"github.com/Checkend/checkend-cli/internal/clierr"
 	"github.com/Checkend/checkend-cli/internal/serverrelease"
+	"github.com/Checkend/checkend-cli/internal/sshsig"
 	. "github.com/Checkend/checkend-cli/internal/testkit"
 )
 
@@ -84,14 +85,20 @@ func TestTheSignatureIsCheckedBeforeTheManifestIsRead(t *testing.T) {
 
 	_, other, _ := ed25519.GenerateKey(rand.Reader)
 	r = f.Publish("0.4.0")
-	r.Assets["checkend-release.json.sig"] = f.Signature(r.Assets["checkend-release.json"], other, f.KeyID)
+	r.Assets["checkend-release.json.sig"] = sshsig.Sign(other, r.Assets["checkend-release.json"], serverrelease.Namespace)
 	_, err = source(f).Latest()
-	failsWith(t, err, "signature")
+	failsWith(t, err, "unknown key SHA256:")
 
+	// A signature of a CLI release (another namespace) is not one of a server release.
 	r = f.Publish("0.5.0")
-	r.Assets["checkend-release.json.sig"] = f.Signature(r.Assets["checkend-release.json"], other, "unknown-key")
+	r.Assets["checkend-release.json.sig"] = sshsig.Sign(f.Key, r.Assets["checkend-release.json"], "checkend-cli-release")
 	_, err = source(f).Latest()
-	failsWith(t, err, `unknown key "unknown-key"`)
+	failsWith(t, err, "namespace")
+
+	r = f.Publish("0.5.1")
+	r.Assets["checkend-release.json.sig"] = []byte(`{"format":1,"key_id":"test-key-1","signature":"AAAA"}`)
+	_, err = source(f).Latest()
+	failsWith(t, err, "not an SSH signature")
 
 	s := source(f)
 	s.Keys = nil

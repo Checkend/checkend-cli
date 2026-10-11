@@ -79,6 +79,10 @@ The first release. Nothing is tagged or published yet. Until then, build `ce` fr
 - All server text is cleaned of terminal escape sequences and control characters before it is
   printed.
 - An unknown command or option exits with code 2 and does nothing.
+- `ce server install` installs only a server release whose manifest has a valid SSH signature
+  (ed25519, `ssh-keygen -Y sign`, namespace `checkend-server-release`) by a trusted key. It checks
+  the signature before it reads the manifest; anyone can check it by hand with
+  `ssh-keygen -Y verify`.
 - A saved token is for its full URL, with the base path: two instances under one host never
   share a token. A URL path with empty, `.` or `..` segments, or an encoded `/`, `\` or `.`,
   exits with code 2.

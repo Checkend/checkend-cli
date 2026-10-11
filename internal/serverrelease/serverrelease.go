@@ -1,9 +1,10 @@
 // Package serverrelease finds, verifies and downloads a released Checkend server: a GitHub
 // release of Checkend/checkend with a signed manifest (checkend-release.json, format 1), the
-// Worker bundle, the migrations and the digest of the Docker image. `ce install` installs only
-// a release that this package verified.
+// Worker bundle, the migrations and the digest of the Docker image. `ce server install` installs
+// only a release that this package verified.
 //
-// The order of the checks: the signature of the exact manifest bytes (with a trusted key),
+// The order of the checks: the SSH signature (`ssh-keygen -Y sign`, namespace
+// checkend-server-release) of the exact manifest bytes with a trusted key,
 // then the manifest, then its tag and commit against the GitHub release, then each asset by
 // its size and SHA-256 when it is downloaded.
 package serverrelease
@@ -12,9 +13,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
-	"crypto/ed25519"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -31,6 +30,7 @@ import (
 
 	"github.com/Checkend/checkend-cli/internal/clierr"
 	"github.com/Checkend/checkend-cli/internal/docs"
+	"github.com/Checkend/checkend-cli/internal/sshsig"
 	"github.com/Checkend/checkend-cli/internal/version"
 )
 
@@ -40,15 +40,21 @@ const DefaultAPI = "https://api.github.com/repos/Checkend/checkend"
 // ImageRepository is the only image repository that a manifest can name.
 const ImageRepository = "ghcr.io/checkend/checkend"
 
-// TrustedKeys are the public keys that sign the server releases: key ID to the raw ed25519
-// public key. A new key is added here before its first release; an old key stays until no
-// supported release uses it.
-var TrustedKeys = map[string][]byte{}
+// TrustedKeys are the public keys that sign the server releases: key ID to an ed25519 key as
+// `ssh-keygen` prints it ("ssh-ed25519 AAAA…"). A new key is added here before its first
+// release; an old key stays until no supported release uses it.
+var TrustedKeys = map[string]string{}
+
+// Namespace is the SSH signature namespace of a server release manifest. The manifest is signed
+// with `ssh-keygen -Y sign -n checkend-server-release` (the CLI releases use another namespace
+// and another key).
+const Namespace = "checkend-server-release"
 
 const (
 	manifestName = "checkend-release.json"
 	signatureExt = ".sig"
 	maxManifest  = 1 << 20
+	// maxSignature fits an armored SSH signature (about 300 bytes) with room.
 	maxSignature = 4 << 10
 	maxAsset     = 200 << 20
 	maxFile      = 50 << 20
@@ -74,7 +80,7 @@ type Source struct {
 	// API is the GitHub API of the repo (DefaultAPI).
 	API string
 	// Keys are the trusted keys (TrustedKeys).
-	Keys map[string][]byte
+	Keys map[string]string
 	// CLIVersion is the version of this CLI, for min_cli_version.
 	CLIVersion string
 	HTTP       *http.Client
@@ -268,25 +274,15 @@ func (s Source) verify(r ghRelease) (*Release, error) {
 }
 
 func (s Source) checkSignature(data, sigFile []byte) (string, error) {
-	var sig struct {
-		Format    int    `json:"format"`
-		KeyID     string `json:"key_id"`
-		Signature string `json:"signature"`
-	}
-	if json.Unmarshal(sigFile, &sig) != nil || sig.Format != 1 {
-		return "", fail("The signature file of the manifest cannot be read.")
-	}
-	key, ok := s.Keys[sig.KeyID]
-	if !ok || len(key) != ed25519.PublicKeySize {
-		return "", clierr.New(clierr.Failure,
-			fmt.Sprintf("The manifest is signed with an unknown key %q.", sig.KeyID),
+	id, err := sshsig.Verify(sigFile, data, Namespace, s.Keys)
+	if errors.Is(err, sshsig.ErrUnknownKey) {
+		return "", clierr.New(clierr.Failure, "The manifest is signed with an unknown key: "+err.Error()+".",
 			"Update ce (a newer ce may trust a newer key), then run the command again.")
 	}
-	raw, err := base64.StdEncoding.DecodeString(sig.Signature)
-	if err != nil || !ed25519.Verify(ed25519.PublicKey(key), data, raw) {
-		return "", fail("The signature of the manifest is not valid.")
+	if err != nil {
+		return "", fail("The signature of the manifest does not verify: %v.", err)
 	}
-	return sig.KeyID, nil
+	return id, nil
 }
 
 func (s Source) check(m *Manifest) error {

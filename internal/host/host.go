@@ -37,7 +37,7 @@ type Host struct {
 	// ReleaseAPI and ReleaseKeys replace the source of the server releases and its trusted
 	// keys (tests only; a release build leaves them empty).
 	ReleaseAPI  string
-	ReleaseKeys map[string][]byte
+	ReleaseKeys map[string]string
 	// Executable is the path of the running ce, with symlinks resolved (for `ce update`).
 	Executable string
 	// CLIReleaseAPI replaces the GitHub API of the CLI repo (tests only).
