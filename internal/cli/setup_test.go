@@ -67,7 +67,7 @@ func TestSetupPrintsTheStepsOnATerminal(t *testing.T) {
 	Contains(t, r.Stdout, "Sent a test event")
 	Contains(t, r.Stdout, "claude mcp add checkend -- ce mcp --url "+api.URL)
 	Contains(t, r.Stdout, "codex mcp add checkend -- ce mcp --url "+api.URL)
-	Contains(t, r.Stdout, `"command": "ce"`)
+	Contains(t, r.Stdout, `{"mcpServers":{"checkend":{"command":"ce","args":["mcp","--url","`+api.URL+`"]}}}`)
 	Contains(t, r.Stdout, "Install the official Sentry SDK")
 	Contains(t, r.Stdout, "sentry-rails")
 	NotContains(t, r.All, api.SetupKey)

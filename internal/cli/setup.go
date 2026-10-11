@@ -75,7 +75,7 @@ func mcpCommands(url string) map[string]string {
 		"server":      url + "/mcp",
 		"claude_code": "claude mcp add checkend -- ce mcp --url " + url,
 		"codex":       "codex mcp add checkend -- ce mcp --url " + url,
-		"cursor":      fmt.Sprintf(`{"mcpServers": {"checkend": {"command": "ce", "args": ["mcp", "--url", %q]}}}`, url),
+		"cursor":      fmt.Sprintf(`{"mcpServers":{"checkend":{"command":"ce","args":["mcp","--url",%q]}}}`, url),
 	}
 }
 

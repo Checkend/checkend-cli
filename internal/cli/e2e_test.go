@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -103,4 +104,77 @@ func TestEndToEnd(t *testing.T) {
 	for _, r := range []Result{login, status, init, projectDSN, next, list, view, event} {
 		NotContains(t, r.All, token)
 	}
+
+	// The task commands, with the admin token.
+	deploy := cli.Run([]string{"deploy", "--commit", "0123456789abcdef0123456789abcdef01234567", "--release", "e2e-1", "--environment", "test"})
+	Code(t, deploy, 0)
+	Equal(t, deploy.JSON(t)["data"].(map[string]any)["environment"], "test")
+
+	rotate := cli.Run([]string{"dsn", "rotate"})
+	Code(t, rotate, 0)
+	newDSN := rotate.JSON(t)["data"].(map[string]any)["dsn"].(string)
+	revoke := cli.Run([]string{"dsn", "rotate", "--revoke-old", "--yes"})
+	Code(t, revoke, 0)
+	Equal(t, len(revoke.JSON(t)["data"].(map[string]any)["revoked"].([]any)), 1)
+	Equal(t, strings.TrimSpace(cli.Run([]string{"project", "dsn"}, Options{TTY: true}).Stdout), newDSN)
+
+	cli.Write("dist/static/app.min.js.map", `{"version":3,"sources":["src/app.ts"],"names":["boom"],"mappings":"AAAAA","sourcesContent":["boom()"]}`)
+	maps := cli.Run([]string{"sourcemaps", "upload", "--release", "e2e-1", "dist"})
+	if os.Getenv("CHECKEND_E2E_BLOBS") != "" {
+		Code(t, maps, 0)
+		Equal(t, maps.JSON(t)["data"].([]any)[0].(map[string]any)["name"], "~/static/app.min.js")
+	} else {
+		Code(t, maps, 2)
+		Contains(t, maps.ErrJSON(t)["error"].(string), "R2")
+	}
+
+	// Agent-first setup with a setup key, in a new home and repo.
+	keyReq, _ := http.NewRequest("POST", base+"/v1/setup/keys", nil)
+	keyReq.Header.Set("Authorization", "Bearer "+token)
+	keyResp, err := http.DefaultClient.Do(keyReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var created struct {
+		Data struct {
+			Key string `json:"key"`
+		} `json:"data"`
+	}
+	_ = json.NewDecoder(keyResp.Body).Decode(&created)
+	keyResp.Body.Close()
+	if !strings.HasPrefix(created.Data.Key, "cks_") {
+		t.Fatalf("no setup key: %d", keyResp.StatusCode)
+	}
+	agent := NewHarness(t)
+	agent.Write("package.json", `{"dependencies":{"@sentry/node":"9","express":"5"}}`)
+	agent.Write(".env.example", "SENTRY_DSN=https://0123456789abcdef0123456789abcdef@o1.ingest.sentry.io/1\n")
+	setupRun := agent.Run([]string{"setup", "--url", base, "--key", created.Data.Key}, Options{Env: map[string]string{"CLAUDECODE": "1"}})
+	Code(t, setupRun, 0)
+	setupOut := setupRun.JSON(t)
+	Equal(t, setupOut["test_event"], "sent")
+	Equal(t, setupOut["token"].(map[string]any)["created"], true)
+	Contains(t, setupOut["steps"].(string), "ce setup")
+	NotContains(t, setupRun.All, created.Data.Key)
+	Code(t, agent.Run([]string{"setup", "report", "sdk_installed"}), 0)
+	Code(t, agent.Run([]string{"next"}), 0)
+
+	mcp := agent.Run([]string{"mcp"}, Options{Stdin: `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"ce-e2e","version":"1"}}}` + "\n" +
+		`{"jsonrpc":"2.0","method":"notifications/initialized"}` + "\n" + `{"jsonrpc":"2.0","id":2,"method":"tools/list"}` + "\n"})
+	Code(t, mcp, 0)
+	Contains(t, mcp.Stdout, `"list_issues"`)
+	for _, r := range []Result{setupRun, mcp} {
+		for _, secret := range agent.Keyring.Secrets {
+			NotContains(t, r.All, secret)
+		}
+	}
+
+	migrate := agent.Run([]string{"migrate-from-sentry"})
+	Code(t, migrate, 0)
+	Equal(t, migrate.JSON(t)["sentry"].(map[string]any)["sdks"], []any{"@sentry/node"})
+	NotContains(t, migrate.All, "0123456789abcdef0123456789abcdef")
+
+	// Delete the first project; then it is gone.
+	del := cli.Run([]string{"project", "delete", jsonString(project["id"]), "--yes"})
+	Code(t, del, 0)
+	Code(t, cli.Run([]string{"project", "dsn", jsonString(project["id"])}), 3)
 }
