@@ -65,7 +65,7 @@ ce --version
 | `ce status` | Instance, version, health, ingest mode, linked project |
 | `ce init [--name <name> \| --project <id\|slug>] [--platform <p>]` | Link the repo to a project (or create one); print the DSN and SDK snippet |
 | `ce next [--project <id\|slug>]` | The most recent unresolved issue, with the next commands |
-| `ce issue list [--status <s>] [--project <id\|slug>] [--limit <n>] [--cursor <c>]` | Issues, the most recent first |
+| `ce issue list [--status <s>] [--release <v>] [--env <name>] [--since <t>] [--search <text>] [--project <id\|slug>] [--limit <n>] [--cursor <c>]` | Issues, the most recent first. `--since` takes `30m`, `24h`, `7d` or an ISO time |
 | `ce issue view <id>` | One issue. `api-42` also checks that issue 42 is in project `api` |
 | `ce event view <id> [--section stack\|request\|tags]` | One event |
 | `ce project list` | All projects |

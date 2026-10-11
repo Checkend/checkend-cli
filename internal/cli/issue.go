@@ -16,18 +16,44 @@ var cursorPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,200}$`)
 
 func issueCommands() []*Command { return []*Command{issueListCommand(), issueViewCommand()} }
 
+// listFilters are the issue list options that go to the server unchanged: option -> parameter.
+var listFilters = [][2]string{
+	{"status", "status"},
+	{"project", "project"},
+	{"release", "release"},
+	{"env", "environment"},
+	{"since", "since"},
+	{"search", "search"},
+	{"limit", "limit"},
+}
+
+var shellSafe = regexp.MustCompile(`^[A-Za-z0-9_./:@%+=,-]+$`)
+
+// shellQuote quotes a value for a command that people can copy.
+func shellQuote(value string) string {
+	if shellSafe.MatchString(value) {
+		return value
+	}
+	return "'" + strings.ReplaceAll(value, "'", `'\''`) + "'"
+}
+
 func issueListCommand() *Command {
 	return &Command{
 		Path:    []string{"issue", "list"},
 		Summary: "List issues, the most recent first (default: the linked project)",
-		Usage:   "[--status <status>] [--project <id|slug>] [--limit <n>] [--cursor <cursor>]",
+		Usage:   "[--status <s>] [--release <v>] [--env <name>] [--since <t>] [--search <text>] [--project <id|slug>] [--limit <n>] [--cursor <c>]",
 		Details: []string{
 			"  --status <status>    unresolved, resolved or ignored",
+			"  --release <version>  Issues seen in this release",
+			"  --env <name>         Issues seen in this environment",
+			"  --since <time>       Seen since 30m, 24h, 7d or an ISO time",
+			"  --search <text>      Text in the title or the culprit",
 			"  --project <id|slug>  Default: the project in .checkend.json, else all projects",
 			"  --limit <n>          1 to 100 (default 25)",
 			"  --cursor <cursor>    The next page, from the previous list",
 		},
-		Options: map[string]Kind{"status": String, "project": String, "limit": String, "cursor": String},
+		Options: map[string]Kind{"status": String, "project": String, "release": String, "env": String,
+			"since": String, "search": String, "limit": String, "cursor": String},
 		Run: func(s *Session) error {
 			client, err := s.API()
 			if err != nil {
@@ -37,8 +63,12 @@ func issueListCommand() *Command {
 			if err != nil {
 				return err
 			}
-			status, limit := s.String("status"), s.String("limit")
-			raw, err := listIssues(s, client, map[string]string{"project": project, "status": status, "limit": limit, "cursor": s.String("cursor")})
+			query := map[string]string{"cursor": s.String("cursor")}
+			for _, f := range listFilters {
+				query[f[1]] = s.String(f[0])
+			}
+			query["project"] = project
+			raw, err := listIssues(s, client, query)
 			if err != nil {
 				return err
 			}
@@ -58,14 +88,14 @@ func issueListCommand() *Command {
 					return table
 				}
 				var args []string
-				if status != "" {
-					args = append(args, "--status "+status)
-				}
-				if s.Has("project") {
-					args = append(args, "--project "+project)
-				}
-				if limit != "" {
-					args = append(args, "--limit "+limit)
+				for _, f := range listFilters {
+					value := s.String(f[0])
+					if f[0] == "project" {
+						value = project
+					}
+					if s.Has(f[0]) && value != "" {
+						args = append(args, "--"+f[0]+" "+shellQuote(value))
+					}
 				}
 				args = append(args, "--cursor "+next)
 				return table + "\n\nMore: ce issue list " + strings.Join(args, " ")

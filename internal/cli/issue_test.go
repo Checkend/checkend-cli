@@ -359,3 +359,43 @@ func TestNextSaysWhenThereIsNothingToDo(t *testing.T) {
 	Code(t, r, 0)
 	Contains(t, r.Stdout, "No unresolved issues.")
 }
+
+func TestIssueListPassesTheFilters(t *testing.T) {
+	api, cli, env, _, _ := listSetup(t)
+	r := cli.Run([]string{"issue", "list", "--release", "1.2.3", "--env", "production", "--since", "24h", "--search", "TypeError: x"}, Options{Env: env})
+	Code(t, r, 0)
+	Equal(t, query(api.Last()), map[string]string{"release": "1.2.3", "environment": "production", "since": "24h", "search": "TypeError: x"})
+}
+
+func TestIssueListKeepsTheFiltersInTheNextPageCommand(t *testing.T) {
+	_, cli, env, _, _ := listSetup(t)
+	r := cli.Run([]string{"issue", "list", "--limit", "1", "--env", "production", "--since", "7d"}, Options{Env: env, TTY: true})
+	Contains(t, r.Stdout, "More: ce issue list --env production --since 7d --limit 1 --cursor 1")
+}
+
+func TestIssueListQuotesAFilterWithSpacesInTheNextPageCommand(t *testing.T) {
+	_, cli, env, _, _ := listSetup(t)
+	r := cli.Run([]string{"issue", "list", "--limit", "1", "--search", "it's bad"}, Options{Env: env, TTY: true})
+	Contains(t, r.Stdout, `More: ce issue list --search 'it'\''s bad' --limit 1 --cursor 1`)
+}
+
+func TestIssueListHelpShowsTheFilters(t *testing.T) {
+	_, cli, _, _, _ := listSetup(t)
+	r := cli.Run([]string{"issue", "list", "--help"})
+	for _, f := range []string{"--release", "--env", "--since", "--search"} {
+		Contains(t, r.Stdout, f)
+	}
+}
+
+func TestIssueListExits2ForABadSince(t *testing.T) {
+	api, cli, env, _, _ := listSetup(t)
+	api.Override = func(r *Request) *Reply {
+		if r.Query.Get("since") == "soon" {
+			return &Reply{Status: 400, Body: J{"error": "invalid_request", "details": []any{J{"path": "since", "message": "Use 30m, 24h, 7d or an ISO time"}}}}
+		}
+		return nil
+	}
+	r := cli.Run([]string{"issue", "list", "--since", "soon"}, Options{Env: env})
+	Code(t, r, 2)
+	Contains(t, r.ErrJSON(t)["error"].(string), "since")
+}
