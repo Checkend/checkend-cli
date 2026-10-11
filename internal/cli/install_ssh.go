@@ -186,6 +186,7 @@ func installScript(dir, composeText, caddyfile string, env *envFile, backup stri
 	b.WriteString(`. /etc/os-release
 if ! $SUDO docker compose version >/dev/null 2>&1; then
   export DEBIAN_FRONTEND=noninteractive
+  $SUDO dpkg --configure -a
   $SUDO apt-get update -q
   $SUDO apt-get install -y -q ca-certificates curl gnupg
   key=$(mktemp)

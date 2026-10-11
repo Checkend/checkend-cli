@@ -124,6 +124,10 @@ func TestInstallSSHInstallsWithAPinnedImageAndCaddy(t *testing.T) {
 	Contains(t, script, "errors.example.com {\n\treverse_proxy checkend:8787\n}")
 	Contains(t, script, "9DC858229FC7DD38854AE2D88D81803C0EBFCD88")
 	NotContains(t, script, "get.docker.com")
+	// An interrupted earlier run can leave dpkg half done; apt-get refuses to run then.
+	if i := strings.Index(script, "dpkg --configure -a"); i < 0 || i > strings.Index(script, "apt-get update") {
+		t.Error("no dpkg --configure -a before apt-get")
+	}
 	env := readEnv(t, writeTemp(t, srv.env))
 	Equal(t, env["PUBLIC_URL"], "https://errors.example.com")
 	Equal(t, env["TRUSTED_PROXIES"], "private")
