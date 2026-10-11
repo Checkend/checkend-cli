@@ -28,6 +28,7 @@ type Request struct {
 	ContentType   string
 	Body          any
 	Raw           []byte
+	Header        http.Header
 }
 
 // Reply replaces a response of the fake.
@@ -41,14 +42,21 @@ type Reply struct {
 // FakeAPI is a fake of the Checkend API (GET /health and /v1). It follows guides/api.md of
 // the server. Tests change its state and can replace any response with Override.
 type FakeAPI struct {
-	Token    string
-	URL      string
-	Health   J
-	Ingest   J
-	Projects []J
-	Issues   []J
-	Events   []J
-	Override func(r *Request) *Reply
+	Token string
+	// SetupKey opens the /v1/setup routes. Tokens are more valid API tokens (agent tokens).
+	SetupKey   string
+	Tokens     []string
+	SetupMD    string
+	TestEvents map[string]bool
+	Reports    []string
+	MCPHeaders []http.Header
+	URL        string
+	Health     J
+	Ingest     J
+	Projects   []J
+	Issues     []J
+	Events     []J
+	Override   func(r *Request) *Reply
 
 	mu       sync.Mutex
 	requests []*Request
@@ -66,7 +74,9 @@ type route struct {
 // NewFakeAPI starts a fake on 127.0.0.1. It stops at the end of the test.
 func NewFakeAPI(t testing.TB) *FakeAPI {
 	f := &FakeAPI{
-		Token: "ce_test_token_0123456789",
+		Token:      "ce_test_token_0123456789",
+		SetupKey:   "cks_test_setup_key_0123456789abcdef",
+		TestEvents: map[string]bool{},
 		Health: J{
 			"status":     "ok",
 			"version":    "0.2.0",
@@ -80,6 +90,7 @@ func NewFakeAPI(t testing.TB) *FakeAPI {
 	}
 	f.server = httptest.NewServer(http.HandlerFunc(f.serve))
 	f.URL = f.server.URL
+	f.SetupMD = "# Set up Checkend error tracking\n\nCheckend (" + f.URL + ") receives errors from Sentry SDKs.\n\n## 3. Install the Sentry SDK\n\nInstall the official Sentry SDK.\n"
 	t.Cleanup(f.Stop)
 	return f
 }
@@ -212,6 +223,7 @@ func (f *FakeAPI) serve(w http.ResponseWriter, req *http.Request) {
 		Authorization: req.Header.Get("Authorization"),
 		ContentType:   req.Header.Get("Content-Type"),
 		Raw:           raw,
+		Header:        req.Header.Clone(),
 	}
 	if len(raw) > 0 {
 		if json.Unmarshal(raw, &r.Body) != nil {
@@ -227,6 +239,10 @@ func (f *FakeAPI) serve(w http.ResponseWriter, req *http.Request) {
 	}
 	if reply == nil {
 		reply = f.route(r)
+	}
+	if reply.Status == 204 || reply.Status == 202 && reply.Body == nil && reply.Raw == "" {
+		w.WriteHeader(reply.Status)
+		return
 	}
 	w.Header().Set("Content-Type", "application/json")
 	for k, v := range reply.Headers {
@@ -263,6 +279,15 @@ func (f *FakeAPI) route(r *Request) *Reply {
 	if r.Method == "GET" && r.Path == "/health" {
 		return &Reply{Status: 200, Body: f.Health}
 	}
+	if r.Method == "GET" && r.Path == "/agent/setup.md" {
+		return &Reply{Status: 200, Raw: f.SetupMD, Headers: map[string]string{"Content-Type": "text/markdown; charset=utf-8"}}
+	}
+	if r.Path == "/mcp" {
+		return f.mcp(r)
+	}
+	if strings.HasPrefix(r.Path, "/v1/setup/") {
+		return f.setup(r)
+	}
 	if !strings.HasPrefix(r.Path, "/v1/") {
 		return notFound("not_found")
 	}
@@ -273,7 +298,7 @@ func (f *FakeAPI) route(r *Request) *Reply {
 			}
 		}
 	}
-	if r.Authorization != "Bearer "+f.Token {
+	if !f.validToken(r.Authorization) {
 		return &Reply{Status: 401, Body: J{"error": "unauthorized"}}
 	}
 	switch {
@@ -393,4 +418,98 @@ func (f *FakeAPI) listIssues(r *Request) *Reply {
 		page = []J{}
 	}
 	return &Reply{Status: 200, Body: J{"data": page, "next_cursor": next, "ingest": f.Ingest}}
+}
+
+func (f *FakeAPI) validToken(authorization string) bool {
+	if authorization == "Bearer "+f.Token {
+		return true
+	}
+	for _, t := range f.Tokens {
+		if authorization == "Bearer "+t {
+			return true
+		}
+	}
+	return false
+}
+
+// setup is /v1/setup: a setup key or the admin token.
+func (f *FakeAPI) setup(r *Request) *Reply {
+	key := r.Authorization == "Bearer "+f.SetupKey
+	if !key && r.Authorization != "Bearer "+f.Token {
+		if f.validToken(r.Authorization) {
+			return &Reply{Status: 403, Body: J{"error": "forbidden", "required_scope": "admin"}}
+		}
+		return &Reply{Status: 401, Body: J{"error": "unauthorized"}}
+	}
+	body, _ := r.Body.(J)
+	if r.Method == "POST" && r.Path == "/v1/setup/apps" {
+		name, _ := body["name"].(string)
+		if strings.TrimSpace(name) == "" {
+			return invalid("name")
+		}
+		for _, p := range f.Projects {
+			if p["name"] == name {
+				return &Reply{Status: 200, Body: J{"data": f.setupApp(p, false)}}
+			}
+		}
+		var platform []string
+		if p, ok := body["platform"].(string); ok {
+			platform = append(platform, p)
+		}
+		p := f.AddProject(name, platform...)
+		if len(platform) == 0 {
+			p["platform"] = nil
+		}
+		return &Reply{Status: 201, Body: J{"data": f.setupApp(p, true)}}
+	}
+	if r.Method == "POST" && r.Path == "/v1/setup/tokens" {
+		ref, _ := body["project"].(string)
+		name, _ := body["name"].(string)
+		if f.FindProject(ref) == nil {
+			return notFound("not_found")
+		}
+		token := fmt.Sprintf("ck_test_agent_token_%04d_0123456789", len(f.Tokens)+1)
+		f.Tokens = append(f.Tokens, token)
+		return &Reply{Status: 201, Body: J{"data": J{"id": len(f.Tokens), "name": name, "scopes": []any{"issues:read", "issues:write"}, "created_at": "2026-10-10T12:00:00.000Z", "token": token}}}
+	}
+	if m := regexp.MustCompile(`^/v1/setup/apps/([^/]+)/(test-event|report)$`).FindStringSubmatch(r.Path); m != nil && r.Method == "POST" {
+		if f.FindProject(m[1]) == nil {
+			return notFound("not_found")
+		}
+		if m[2] == "test-event" {
+			if f.TestEvents[m[1]] {
+				return &Reply{Status: 409, Body: J{"error": "already_sent", "message": "This app already has its test event."}}
+			}
+			f.TestEvents[m[1]] = true
+			return &Reply{Status: 202, Body: J{"data": J{"sent": true}}}
+		}
+		if body["step"] != "sdk_installed" {
+			return invalid("step")
+		}
+		f.Reports = append(f.Reports, m[1]+" "+body["step"].(string))
+		return &Reply{Status: 204}
+	}
+	return notFound("not_found")
+}
+
+func (f *FakeAPI) setupApp(p J, created bool) J {
+	return J{"created": created, "project": J{"id": p["id"], "slug": p["slug"], "name": p["name"], "platform": p["platform"]}, "dsn": p["dsns"].([]any)[0]}
+}
+
+// mcp answers JSON-RPC requests with {"echo": method}; notifications get 202.
+func (f *FakeAPI) mcp(r *Request) *Reply {
+	f.mu.Lock()
+	f.MCPHeaders = append(f.MCPHeaders, r.Header)
+	f.mu.Unlock()
+	if r.Method != "POST" {
+		return &Reply{Status: 405, Body: J{"error": "method_not_allowed"}}
+	}
+	if !f.validToken(r.Authorization) {
+		return &Reply{Status: 401, Body: J{"error": "unauthorized"}}
+	}
+	msg, _ := r.Body.(J)
+	if _, ok := msg["id"]; !ok {
+		return &Reply{Status: 202}
+	}
+	return &Reply{Status: 200, Body: J{"jsonrpc": "2.0", "id": msg["id"], "result": J{"echo": msg["method"]}}}
 }

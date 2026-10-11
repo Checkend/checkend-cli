@@ -168,6 +168,11 @@ func ResolveToken(h *host.Host, flag, url string) (string, error) {
 			return value, nil
 		}
 	}
+	return SavedToken(h, url)
+}
+
+// SavedToken is the token that `ce login` or `ce setup` saved for this exact URL. "" when none.
+func SavedToken(h *host.Host, url string) (string, error) {
 	cfg, err := ReadUserConfig(h)
 	if err != nil {
 		return "", err

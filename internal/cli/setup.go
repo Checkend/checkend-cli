@@ -1,0 +1,312 @@
+package cli
+
+import (
+	"fmt"
+	"path/filepath"
+	"regexp"
+	"slices"
+	"strings"
+
+	"github.com/Checkend/checkend-cli/internal/api"
+	"github.com/Checkend/checkend-cli/internal/clierr"
+	"github.com/Checkend/checkend-cli/internal/config"
+	"github.com/Checkend/checkend-cli/internal/jv"
+	"github.com/Checkend/checkend-cli/internal/snippets"
+	"github.com/Checkend/checkend-cli/internal/urlcheck"
+)
+
+var setupKeyPattern = regexp.MustCompile(`^cks_[A-Za-z0-9_-]{20,}$`)
+
+// setupSteps are the steps that an agent can report.
+var setupSteps = []string{"sdk_installed"}
+
+const newKeyHint = "Ask the user for a new setup key: \"Copy prompt\" in Checkend makes one (it is valid for 1 hour)."
+
+func setupCommands() []*Command { return []*Command{setupCommand(), setupReportCommand()} }
+
+// setupKey returns the setup key from --key or CHECKEND_SETUP_KEY, checked, and hides it.
+func setupKey(s *Session) (string, error) {
+	key := s.String("key")
+	if key == "" {
+		key = s.Host.Getenv("CHECKEND_SETUP_KEY")
+	}
+	s.Out.Hide(key)
+	if key != "" && !setupKeyPattern.MatchString(key) {
+		return "", clierr.UsageError("The setup key is not valid: it starts with cks_.", newKeyHint)
+	}
+	return key, nil
+}
+
+// agentName guesses the coding agent from its environment, for the token name.
+func agentName(s *Session) string {
+	if name := s.String("agent"); name != "" {
+		return name
+	}
+	switch {
+	case s.Host.Getenv("CLAUDECODE") != "":
+		return "Claude Code"
+	case s.Host.Getenv("CODEX_SANDBOX") != "" || s.Host.Getenv("CODEX_HOME") != "":
+		return "Codex"
+	case s.Host.Getenv("CURSOR_TRACE_ID") != "" || s.Host.Getenv("CURSOR_AGENT") != "":
+		return "Cursor"
+	}
+	return "Coding agent"
+}
+
+type setupResult struct {
+	URL     string `json:"url"`
+	Project any    `json:"project"`
+	Created bool   `json:"created"`
+	DSN     string `json:"dsn"`
+	Stack   any    `json:"stack"`
+	File    string `json:"file"`
+	Token   struct {
+		Created bool   `json:"created"`
+		Storage string `json:"storage"`
+	} `json:"token"`
+	TestEvent string            `json:"test_event"`
+	MCP       map[string]string `json:"mcp"`
+	StepsURL  string            `json:"steps_url"`
+	Steps     string            `json:"steps"`
+}
+
+func mcpCommands(url string) map[string]string {
+	return map[string]string{
+		"server":      url + "/mcp",
+		"claude_code": "claude mcp add checkend -- ce mcp --url " + url,
+		"codex":       "codex mcp add checkend -- ce mcp --url " + url,
+		"cursor":      fmt.Sprintf(`{"mcpServers": {"checkend": {"command": "ce", "args": ["mcp", "--url", %q]}}}`, url),
+	}
+}
+
+func setupCommand() *Command {
+	return &Command{
+		Path:    []string{"setup"},
+		Summary: "Connect this repo to Checkend with a setup key (for coding agents)",
+		Usage:   "--url <url> --key <cks_…> [--name <name>] [--platform <platform>] [--agent <name>]",
+		Details: []string{
+			"  --url <url>            The Checkend instance",
+			"  --key <cks_…>          The setup key from the prompt (or CHECKEND_SETUP_KEY)",
+			"  --name <name>          The app name (default: the repo directory)",
+			"  --platform <platform>  Override the detected stack, for example node-express",
+			"  --agent <name>         The agent, for the token name (default: detected)",
+			"",
+			"Registers the app, writes .checkend.json, saves an agent token in the OS keychain,",
+			"sends a test event, and prints the MCP commands and the next steps for the agent.",
+			"The setup key and the token are never printed.",
+			"",
+			"Then: ce setup report sdk_installed --key <cks_…>   (after the SDK is installed)",
+		},
+		Options: map[string]Kind{"key": String, "name": String, "platform": String, "agent": String},
+		Run: func(s *Session) error {
+			h := s.Host
+			key, err := setupKey(s)
+			if err != nil {
+				return err
+			}
+			input := s.String("url")
+			if input == "" {
+				input = h.Getenv("CHECKEND_URL")
+			}
+			if input == "" {
+				return clierr.UsageError("Give the URL of your Checkend instance.", "Run `ce setup --url <url> --key <cks_…>` (both are in the prompt).")
+			}
+			url, err := urlcheck.Normalize(input)
+			if err != nil {
+				return err
+			}
+			if key == "" {
+				return clierr.UsageError("Give the setup key.", "Run `ce setup --url "+url+" --key <cks_…>` (the key is in the prompt), or set CHECKEND_SETUP_KEY.")
+			}
+			root := config.FindRepoRoot(h.Cwd)
+			if root == "" {
+				root = h.Cwd
+			}
+			stack := snippets.DetectStack(root)
+			platform := s.String("platform")
+			if platform == "" {
+				platform = stack.Platform
+			}
+			name := s.String("name")
+			if name == "" {
+				name = filepath.Base(root)
+			}
+
+			client := api.New(h, url, key)
+			health, _, err := client.Health()
+			if err != nil {
+				return err
+			}
+			if health.Status != "ok" {
+				return clierr.Fail(fmt.Sprintf("The Checkend instance at %s is not healthy (%s).", url, health.Status))
+			}
+			raw, err := client.Post("/v1/setup/apps", createBody(name, platform))
+			if err != nil {
+				return keyError(err)
+			}
+			body, _ := jv.Decode(raw)
+			data := jv.Get(body, "data")
+			project, ok := jv.Get(data, "project").(map[string]any)
+			if !ok {
+				return clierr.Fail("The server returned an app that cannot be read.")
+			}
+			checked, err := snippets.CheckDSN(jv.Get(data, "dsn"))
+			if err != nil {
+				return err
+			}
+			file, err := writeLink(root, project)
+			if err != nil {
+				return err
+			}
+			ref := jv.Str(project["id"])
+
+			var r setupResult
+			r.URL, r.Project, r.Created, r.DSN, r.Stack, r.File = url, project, jv.Get(data, "created") == true, checked, stack, file
+			saved, err := config.SavedToken(h, url)
+			if err != nil {
+				return err
+			}
+			if saved != "" {
+				s.Out.Hide(saved)
+				r.Token.Storage = "saved"
+			} else {
+				raw, err := client.Post("/v1/setup/tokens", map[string]string{"name": agentName(s) + " (ce setup)", "project": ref})
+				if err != nil {
+					return keyError(err)
+				}
+				created, _ := jv.Decode(raw)
+				token := jv.Str(jv.Get(created, "data", "token"))
+				s.Out.Hide(token)
+				if token == "" {
+					return clierr.Fail("The server did not return a token.")
+				}
+				if r.Token.Storage, err = config.SaveToken(h, url, token); err != nil {
+					return err
+				}
+				r.Token.Created = true
+			}
+
+			r.TestEvent = "sent"
+			if _, err := client.Post("/v1/setup/apps/"+ref+"/test-event", map[string]any{}); err != nil {
+				if clierr.CodeOf(err) != clierr.Conflict {
+					return keyError(err)
+				}
+				r.TestEvent = "already_sent"
+			}
+			r.MCP = mcpCommands(url)
+			r.StepsURL = url + "/agent/setup.md"
+			if steps, err := client.Text("/agent/setup.md"); err == nil {
+				r.Steps = steps
+			}
+			s.Out.Data(r, func(d any) string { return renderSetup(d) })
+			return nil
+		},
+	}
+}
+
+// keyError explains a rejected setup key.
+func keyError(err error) error {
+	if clierr.CodeOf(err) == clierr.Auth {
+		return clierr.New(clierr.Auth, "The setup key was rejected: it is old, revoked or not for this instance.", newKeyHint)
+	}
+	return err
+}
+
+func renderSetup(d any) string {
+	project := jv.Get(d, "project")
+	stack := jv.Get(d, "stack")
+	lines := []string{
+		fmt.Sprintf("Connected %s (%s) as app %s (%s).", jv.Str(jv.Get(project, "name")), jv.Str(jv.Get(stack, "label")),
+			jv.Str(jv.Get(project, "slug")), jv.Str(jv.Get(project, "id"))),
+		fmt.Sprintf("Wrote %s (the project link only, no token; safe to commit).", jv.Str(jv.Get(d, "file"))),
+		"",
+		"DSN: " + jv.Str(jv.Get(d, "dsn")),
+	}
+	if sdk := jv.Str(jv.Get(stack, "sdk")); sdk != "" {
+		lines = append(lines, "Sentry SDK: "+sdk)
+	}
+	switch jv.Str(jv.Get(d, "token", "storage")) {
+	case "saved":
+		lines = append(lines, "Kept the saved token of "+jv.Str(jv.Get(d, "url"))+".")
+	case config.StorageKeychain:
+		lines = append(lines, "Saved an agent token in the OS keychain.")
+	default:
+		lines = append(lines, "Saved an agent token in "+jv.Str(jv.Get(d, "token", "storage"))+" (mode 600).")
+	}
+	if jv.Str(jv.Get(d, "test_event")) == "sent" {
+		lines = append(lines, "Sent a test event.")
+	} else {
+		lines = append(lines, "The test event of this app was sent before.")
+	}
+	mcp := jv.Get(d, "mcp")
+	lines = append(lines, "",
+		"Connect MCP (the token stays in the keychain):",
+		"  Claude Code:  "+jv.Str(jv.Get(mcp, "claude_code")),
+		"  Codex:        "+jv.Str(jv.Get(mcp, "codex")),
+		"  Cursor:       add to .cursor/mcp.json: "+jv.Str(jv.Get(mcp, "cursor")),
+		"")
+	if steps := strings.TrimSpace(jv.Str(jv.Get(d, "steps"))); steps != "" {
+		lines = append(lines, "Next steps (from "+jv.Str(jv.Get(d, "steps_url"))+"):", "", steps)
+	} else {
+		lines = append(lines, "Read the next steps at "+jv.Str(jv.Get(d, "steps_url"))+".")
+	}
+	return strings.Join(lines, "\n")
+}
+
+func setupReportCommand() *Command {
+	return &Command{
+		Path:    []string{"setup", "report"},
+		Summary: "Report a setup step to Checkend (sdk_installed)",
+		Usage:   "<step> [--key <cks_…>] [--project <id|slug>]",
+		Details: []string{
+			"  <step>               sdk_installed",
+			"  --key <cks_…>        The setup key (or CHECKEND_SETUP_KEY)",
+			"  --project <id|slug>  Default: the project in .checkend.json",
+		},
+		Options: map[string]Kind{"key": String, "project": String},
+		Args:    []string{"step"},
+		Run: func(s *Session) error {
+			step := s.Args[0]
+			if !slices.Contains(setupSteps, step) {
+				return clierr.UsageError(fmt.Sprintf("Unknown step %q.", step), "Use one of: "+strings.Join(setupSteps, ", ")+".")
+			}
+			key, err := setupKey(s)
+			if err != nil {
+				return err
+			}
+			ref, err := s.ProjectRef()
+			if err != nil {
+				return err
+			}
+			if ref == "" {
+				return clierr.UsageError("No project given and no .checkend.json found.", "Run `ce setup` first, or give --project.")
+			}
+			var client *api.Client
+			if key != "" {
+				url, err := s.URL()
+				if err != nil {
+					return err
+				}
+				client = api.New(s.Host, url, key)
+			} else if client, err = s.API(); err != nil {
+				return err
+			}
+			path := "/v1/setup/apps/" + strings.ToLower(strings.TrimSpace(ref)) + "/report"
+			if _, err := client.Post(path, map[string]string{"step": step}); err != nil {
+				if clierr.CodeOf(err) == clierr.Auth {
+					if key != "" {
+						return keyError(err)
+					}
+					return clierr.New(clierr.Auth, "This token cannot report setup steps.",
+						fmt.Sprintf("Run `ce setup report %s --key <cks_…>` with the setup key from the prompt.", step))
+				}
+				_, err = api.OrNotFound(nil, err, fmt.Sprintf("App %q not found for this key.", ref), "Run `ce setup` first.")
+				return err
+			}
+			s.Out.Data(map[string]any{"project": ref, "step": step, "reported": true}, func(d any) string {
+				return fmt.Sprintf("Reported %s for %s.", jv.Str(jv.Get(d, "step")), jv.Str(jv.Get(d, "project")))
+			})
+			return nil
+		},
+	}
+}

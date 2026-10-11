@@ -92,6 +92,26 @@ func (c *Client) Post(path string, body any) (json.RawMessage, error) {
 	return c.Call("POST", path, data, "application/json")
 }
 
+// Text calls GET path without the token and returns the body as text (for example a Markdown
+// recipe). It reads at most 1 MB.
+func (c *Client) Text(path string) (string, error) {
+	req, err := http.NewRequest("GET", c.URL+path, nil)
+	if err != nil {
+		return "", clierr.Fail(fmt.Sprintf("Cannot build the request: %v", err))
+	}
+	req.Header.Set("User-Agent", "checkend-cli/"+version.Version)
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return "", clierr.New(clierr.Failure, fmt.Sprintf("Cannot reach %s: %v", c.URL, err), "Check the URL and your network.")
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return "", clierr.Fail(fmt.Sprintf("%s%s answered HTTP %d.", c.URL, path, resp.StatusCode))
+	}
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	return string(data), err
+}
+
 // Delete calls DELETE path.
 func (c *Client) Delete(path string) (json.RawMessage, error) {
 	return c.Call("DELETE", path, nil, "")
@@ -165,6 +185,7 @@ func (c *Client) send(method, path string, body []byte, contentType string, auth
 func (c *Client) httpError(resp response) error {
 	var body struct {
 		Error   any `json:"error"`
+		Message any `json:"message"`
 		Reason  any `json:"reason"`
 		Details []struct {
 			Path    any `json:"path"`
@@ -193,8 +214,14 @@ func (c *Client) httpError(resp response) error {
 	case 404:
 		return &NotFound{Code: code}
 	case 409:
+		if message, ok := body.Message.(string); ok && message != "" {
+			return clierr.New(clierr.Conflict, sanitize.OneLine(message), "")
+		}
 		return clierr.New(clierr.Conflict, "Conflict: "+code, "")
 	case 429:
+		if message, ok := body.Message.(string); ok && message != "" {
+			return clierr.Fail(sanitize.OneLine(message))
+		}
 		after := resp.retryAfter
 		if after == "" {
 			after = "a few"

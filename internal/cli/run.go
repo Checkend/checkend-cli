@@ -24,7 +24,7 @@ var globalOptions = map[string]Kind{
 
 // commands lists only commands whose server API exists (and so they are in --help).
 func commands() []*Command {
-	return slices.Concat(authCommands(), []*Command{initCommand(), nextCommand()},
+	return slices.Concat(authCommands(), setupCommands(), []*Command{initCommand(), nextCommand()},
 		issueCommands(), eventCommands(), projectCommands())
 }
 
@@ -95,6 +95,14 @@ func dispatch(argv []string, h *host.Host, out *output.Output) error {
 	for _, c := range group {
 		if len(c.Path) == 1 {
 			command = c
+		}
+	}
+	// A command can also have subcommands, for example `ce setup` and `ce setup report`.
+	if command != nil && len(argv) > 1 {
+		for _, c := range group {
+			if len(c.Path) == 2 && c.Path[1] == argv[1] {
+				command, rest = c, argv[2:]
+			}
 		}
 	}
 	if command == nil {
