@@ -14,18 +14,21 @@ a script, a pipe), or with `--json`, it prints the API JSON.
 
 ## Install
 
-Requires Node.js 22.18 or later.
+`ce` is one binary for macOS, Linux and Windows. Until the first release, build it from source
+(Go 1.26 or later):
 
 ```sh
-npm install -g @checkend/cli
+go install github.com/Checkend/checkend-cli/cmd/ce@latest
 ce --version
 ```
 
 ## Get started
 
-1. Log in to your Checkend instance. The token is the `ADMIN_TOKEN` secret of your Checkend
-   Worker. The CLI checks the URL and the token, then saves them in
-   `~/.config/checkend/config.json` (file mode 600).
+1. Log in to your Checkend instance with an API token (or the `ADMIN_TOKEN` secret of your
+   Checkend instance). The CLI checks the URL and the token. It saves the token in the OS
+   keychain (macOS Keychain, Windows Credential Manager or the Secret Service on Linux), and the
+   URL in `~/.config/checkend/config.json`. Without a keychain, the token goes to that file
+   (mode 600), and the CLI tells you.
 
    ```sh
    ce login
@@ -104,7 +107,8 @@ token goes only to the URL that it was saved for.
 - An unknown command or option exits with code 2 and does nothing. `ce` is one key from `cd`.
 - HTTPS only, except `http://localhost` and `http://127.0.0.1`. The CLI does not follow
   redirects, so the token cannot go to another host.
-- The CLI never prints a token, and never writes one to `.checkend.json`.
+- The CLI never prints a token, and never writes one to `.checkend.json`. Set
+  `CHECKEND_NO_KEYCHAIN=1` to keep the token in the config file instead of the keychain.
 - Error data comes from your apps and is untrusted. The CLI removes terminal escape sequences and
   control characters from all server text before it prints it. JSON output keeps the values, with
   those characters escaped.
@@ -112,17 +116,14 @@ token goes only to the URL that it was saved for.
 ## Develop
 
 ```sh
-npm ci
-npm test            # Vitest, against an in-process fake of the Checkend API
-npm run lint        # Biome
-npm run typecheck
-npm run check       # all of the above, and the build
-node src/bin.ts --help   # run from source (Node 22.18+ strips the types)
+make check          # gofmt, go vet, staticcheck, tests and build
+go test ./...       # the tests, against an in-process fake of the Checkend API
+go run ./cmd/ce --help
 ```
 
 ### End-to-end test
 
-`test/e2e/` runs the CLI against a real Checkend server. It is skipped unless
+`internal/cli/e2e_test.go` runs the CLI against a real Checkend server. It is skipped unless
 `CHECKEND_E2E_URL` and `CHECKEND_E2E_TOKEN` are set. To run it with a local server, in a clone
 of [Checkend/checkend](https://github.com/Checkend/checkend):
 
@@ -135,7 +136,7 @@ npx wrangler dev --port 8799 --persist-to /tmp/checkend-e2e --env-file /dev/null
 Then, in this repo:
 
 ```sh
-CHECKEND_E2E_URL=http://127.0.0.1:8799 CHECKEND_E2E_TOKEN=e2e-token npm run test:e2e
+CHECKEND_E2E_URL=http://127.0.0.1:8799 CHECKEND_E2E_TOKEN=e2e-token make e2e
 ```
 
 The test logs in, runs `ce init`, sends one error to the DSN as a Sentry SDK does, and reads it

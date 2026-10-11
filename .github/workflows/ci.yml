@@ -13,32 +13,48 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test:
-    name: Lint, types, tests and build
+  lint:
+    name: Format, vet and staticcheck
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - run: make lint
+      - name: go.mod and go.sum are tidy
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum
+
+  test:
+    name: Tests (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm run lint
-      - run: npm run typecheck
-      - run: npm test
-      - name: Build
-        run: npm run build
-      - name: The packed package runs
+          go-version-file: go.mod
+      - name: Tests (with the race detector, except on Windows)
+        shell: bash
         run: |
-          npm pack --silent --pack-destination "$RUNNER_TEMP"
-          cd "$RUNNER_TEMP"
-          npm init -y > /dev/null
-          npm install ./checkend-cli-*.tgz
-          npx ce --version
-          npx checkend --help
+          if [ "$RUNNER_OS" = "Windows" ]; then go test ./...; else go test -race ./...; fi
+      - name: The binary runs
+        shell: bash
+        run: |
+          go build -o bin/ce ./cmd/ce
+          ./bin/ce --version
+          ./bin/ce --help
 
   secrets:
     name: Secret scan (gitleaks, full history)

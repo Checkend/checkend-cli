@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -18,6 +19,9 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 	bin = filepath.Join(dir, "ce")
+	if runtime.GOOS == "windows" {
+		bin += ".exe"
+	}
 	if out, err := exec.Command("go", "build", "-o", bin, ".").CombinedOutput(); err != nil {
 		panic(string(out))
 	}

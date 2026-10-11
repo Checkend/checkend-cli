@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -62,6 +63,9 @@ func TestSaveTokenFallsBackToAFileWithMode600(t *testing.T) {
 		t.Error("the token is not in the file")
 	}
 	for path, mode := range map[string]os.FileMode{file: 0o600, filepath.Dir(file): 0o700} {
+		if runtime.GOOS == "windows" {
+			break
+		}
 		info, _ := os.Stat(path)
 		if info.Mode().Perm() != mode {
 			t.Errorf("%s: mode %o", path, info.Mode().Perm())

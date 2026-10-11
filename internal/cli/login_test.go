@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	. "github.com/Checkend/checkend-cli/internal/testkit"
@@ -50,7 +51,7 @@ func TestLoginAsksOnATerminalChecksAndSavesInTheKeychain(t *testing.T) {
 	}
 	info, _ := os.Stat(configPath(cli))
 	dir, _ := os.Stat(filepath.Dir(configPath(cli)))
-	if info.Mode().Perm() != 0o600 || dir.Mode().Perm() != 0o700 {
+	if runtime.GOOS != "windows" && (info.Mode().Perm() != 0o600 || dir.Mode().Perm() != 0o700) {
 		t.Errorf("modes %o %o", info.Mode().Perm(), dir.Mode().Perm())
 	}
 }
