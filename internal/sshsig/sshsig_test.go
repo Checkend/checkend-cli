@@ -3,6 +3,8 @@ package sshsig
 import (
 	"crypto/ed25519"
 	"crypto/rand"
+	"encoding/base64"
+	"encoding/binary"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -104,5 +106,45 @@ func TestInteroperatesWithSSHKeygen(t *testing.T) {
 	cmd.Stdin = strings.NewReader(string(data))
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("ssh-keygen refused our signature: %v %s", err, out)
+	}
+}
+
+// withExtra decodes an armored signature, changes its blob, and armors it again.
+func withExtra(t *testing.T, armored []byte, change func(blob []byte) []byte) []byte {
+	t.Helper()
+	text := strings.TrimSpace(string(armored))
+	text = strings.TrimSuffix(strings.TrimPrefix(text, beginLine), endLine)
+	blob, err := base64.StdEncoding.DecodeString(strings.Join(strings.Fields(text), ""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return armor(change(blob))
+}
+
+func TestVerifyRefusesTrailingBytes(t *testing.T) {
+	priv, pub := newKey(t)
+	msg := []byte(`{"format":1}`)
+	keys := map[string]string{"release-1": pub}
+	good := Sign(priv, msg, ns)
+	// After the last field of the outer blob.
+	outer := withExtra(t, good, func(b []byte) []byte { return append(b, 0) })
+	// Inside the signature blob, after the signature: grow its length field and append a byte.
+	inner := withExtra(t, good, func(b []byte) []byte {
+		// The signature blob is the last string: its length is the 4 bytes before it.
+		sigLen := binary.BigEndian.Uint32(b[len(b)-4-83 : len(b)-83])
+		if sigLen != 83 {
+			t.Fatalf("signature blob length %d", sigLen)
+		}
+		out := append([]byte(nil), b[:len(b)-4-83]...)
+		out = binary.BigEndian.AppendUint32(out, 84)
+		return append(append(out, b[len(b)-83:]...), 0)
+	})
+	for name, sig := range map[string][]byte{"outer": outer, "signature blob": inner} {
+		if _, err := Verify(sig, msg, ns, keys); err == nil || !strings.Contains(err.Error(), "not an SSH signature") {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	if _, err := Verify(good, msg, ns, keys); err != nil {
+		t.Fatal(err)
 	}
 }

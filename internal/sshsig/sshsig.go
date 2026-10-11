@@ -106,7 +106,8 @@ func Verify(armored, message []byte, namespace string, trusted map[string]string
 	_ = r.string() // reserved
 	hashAlg := r.string()
 	sigBlob := r.string()
-	if r.err {
+	// Nothing may follow the last field, here and in the key and signature blobs.
+	if r.err || len(r.data) > 0 {
 		return "", errFormat
 	}
 	if string(ns) != namespace {
@@ -117,7 +118,7 @@ func Verify(armored, message []byte, namespace string, trusted map[string]string
 		return "", errors.New("the signature is not made with an ed25519 key")
 	}
 	pub := pr.string()
-	if pr.err || len(pub) != ed25519.PublicKeySize {
+	if pr.err || len(pr.data) > 0 || len(pub) != ed25519.PublicKeySize {
 		return "", errFormat
 	}
 	id := ""
@@ -144,7 +145,10 @@ func Verify(armored, message []byte, namespace string, trusted map[string]string
 	h.Write(message)
 	sr := &reader{data: sigBlob}
 	sigType, sig := sr.string(), sr.string()
-	if sr.err || string(sigType) != keyType || !ed25519.Verify(ed25519.PublicKey(pub), signedData(namespace, string(hashAlg), h.Sum(nil)), sig) {
+	if sr.err || len(sr.data) > 0 {
+		return "", errFormat
+	}
+	if string(sigType) != keyType || !ed25519.Verify(ed25519.PublicKey(pub), signedData(namespace, string(hashAlg), h.Sum(nil)), sig) {
 		return "", errors.New("the signature is not valid for this file")
 	}
 	return id, nil
