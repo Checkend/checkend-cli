@@ -14,12 +14,39 @@ a script, a pipe), or with `--json`, it prints the API JSON.
 
 ## Install
 
-`ce` is one binary for macOS, Linux and Windows. Until the first release, build it from source
-(Go 1.26 or later):
+`ce` is one binary for macOS, Linux and Windows. From the first release, install it with one
+of these:
+
+```sh
+brew install checkend/tap/checkend
+curl -fsSL https://raw.githubusercontent.com/Checkend/checkend-cli/main/install.sh | sh
+npx @checkend/cli --version
+```
+
+`install.sh` and the npm package check the SHA-256 of the binary before they run it. Until the
+first release, build it from source (Go 1.26 or later):
 
 ```sh
 go install github.com/Checkend/checkend-cli/cmd/ce@latest
 ce --version
+```
+
+## Set up with a coding agent
+
+In Checkend, "Copy prompt" gives a prompt for Claude Code, Codex or Cursor with a setup key
+(`cks_…`, valid for 1 hour). The agent runs:
+
+```sh
+ce setup --url https://checkend.example.com --key cks_…
+```
+
+`ce setup` registers the app, writes `.checkend.json`, saves an agent token in the OS keychain,
+sends a test event, and prints the MCP command and the code changes for the agent. The setup key
+and the token are never printed. The agent connects MCP with `ce mcp`, so the token stays in the
+keychain:
+
+```sh
+claude mcp add checkend -- ce mcp --url https://checkend.example.com
 ```
 
 ## Get started
@@ -71,6 +98,14 @@ ce --version
 | `ce project list` | All projects |
 | `ce project create --name <name> [--platform <p>]` | Create a project and print its DSN |
 | `ce project dsn [<id\|slug>]` | The DSN of a project (default: the linked project) |
+| `ce project delete <id\|slug> [--yes]` | Delete a project and its data. Asks for the name on a terminal; `--yes` in CI |
+| `ce setup --url <url> --key <cks_…>` | Connect the repo with a setup key (for coding agents; see above) |
+| `ce setup report sdk_installed` | Report a setup step |
+| `ce mcp [--url <url>]` | A stdio MCP server for agents; the token stays in the keychain |
+| `ce deploy [--release <v>] [--environment <name>] [--commit <sha>] [--commits-since <sha>]` | Report a deploy from CI (default commit: git HEAD) |
+| `ce sourcemaps upload --release <v> [--url-prefix <p>] <dir\|file.map>...` | Build the index of each source map locally and upload it |
+| `ce dsn rotate [--revoke-old [--yes]]` | Make a new DSN key; then revoke the old keys |
+| `ce migrate-from-sentry` | Find the Sentry setup of the repo and get a Checkend DSN for it |
 
 `--project` accepts the public project ID (for example `4817305926`) or the project slug. More
 commands come when the server API for them exists. `ce --help` shows only the commands that work.
