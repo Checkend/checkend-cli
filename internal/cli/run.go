@@ -18,6 +18,7 @@ var globalOptions = map[string]Kind{
 	"url":   String,
 	"token": String,
 	"json":  Bool,
+	"plain": Bool,
 	"help":  Bool,
 }
 
@@ -35,7 +36,7 @@ var groups = map[string]string{
 
 // Run runs `ce argv...` and returns the exit code.
 func Run(argv []string, h *host.Host) int {
-	out := output.New(h, slices.Contains(argv, "--json"), false)
+	out := output.New(h, slices.Contains(argv, "--json"), slices.Contains(argv, "--plain"))
 	out.Hide(h.Getenv("CHECKEND_TOKEN"))
 	out.Hide(h.Getenv("CHECKEND_ADMIN_TOKEN"))
 	for i, arg := range argv {
@@ -176,6 +177,7 @@ Options for all commands:
   --url <url>       The Checkend instance (or CHECKEND_URL)
   --token <token>   The API token (or CHECKEND_TOKEN)
   --json            Print JSON (the default when stdout is not a terminal)
+  --plain           Print text, also when stdout is not a terminal
   -h, --help        Show the help
   -V, --version     Show the version
 

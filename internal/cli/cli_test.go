@@ -122,3 +122,27 @@ func TestAnUnknownCommandNameIsCleaned(t *testing.T) {
 		t.Errorf("escape in output: %q", r.All)
 	}
 }
+
+func TestPlainPrintsTextWhenStdoutIsNotATerminal(t *testing.T) {
+	api, cli, env := setup(t)
+	api.AddProject("API Server")
+	r := cli.Run([]string{"project", "list", "--plain"}, Options{Env: env})
+	Code(t, r, 0)
+	Matches(t, r.Stdout, `ID\s+SLUG\s+NAME\s+PLATFORM`)
+	NotContains(t, r.Stdout, "\x1b[")
+	e := cli.Run([]string{"issue", "view", "99", "--plain"}, Options{Env: env})
+	Code(t, e, 3)
+	Contains(t, e.Stderr, "Error: Issue 99 not found.")
+}
+
+func TestJSONWinsOverPlain(t *testing.T) {
+	api, cli, env := setup(t)
+	api.AddProject("API Server")
+	r := cli.Run([]string{"project", "list", "--plain", "--json"}, Options{Env: env, TTY: true})
+	r.JSON(t)
+}
+
+func TestHelpShowsPlain(t *testing.T) {
+	_, cli, _ := setup(t)
+	Contains(t, cli.Run([]string{"--help"}).Stdout, "--plain")
+}

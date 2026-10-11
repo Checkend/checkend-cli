@@ -82,6 +82,7 @@ commands come when the server API for them exists. `ce --help` shows only the co
 | `--url <url>` | `CHECKEND_URL` | The Checkend instance |
 | `--token <token>` | `CHECKEND_TOKEN` (or `CHECKEND_ADMIN_TOKEN`) | The API token |
 | `--json` | | Print JSON, also on a terminal |
+| `--plain` | | Print text, also when stdout is not a terminal (`--json` wins) |
 
 The CLI looks for settings in this order: flags, environment, `.checkend.json` (the project only,
 found in the current directory or a parent up to the repo root), then the saved login. A saved
@@ -90,7 +91,7 @@ token goes only to the URL that it was saved for.
 ## Output and exit codes
 
 - Terminal: tables and cards. Colour only on a terminal, and never when `NO_COLOR` is set.
-- Not a terminal, or `--json`: the API JSON, unchanged in shape. Errors go to stderr as
+- Not a terminal, or `--json`: the API JSON, unchanged in shape. `--plain` prints text instead. Errors go to stderr as
   `{"error": "...", "hint": "..."}`.
 
 | Exit code | Meaning |
