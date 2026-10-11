@@ -211,3 +211,17 @@ func toJSONStrings(v any) []string {
 	}
 	return out
 }
+
+func TestInstallCloudflareRefusesAMigrationNameThatIsNotSafeInSQL(t *testing.T) {
+	f, cf, cli, env := cloudflare(t)
+	bad := TarGz(map[string]string{"migrations/0001_x');DROP TABLE t;--.sql": "SELECT 1;", "migrations/0002_projects.sql": "SELECT 2;"})
+	pub := f.Publish("0.4.0", func(m map[string]any) {
+		mig := m["migrations"].(map[string]any)
+		mig["sha256"], mig["size"] = Sum(bad), len(bad)
+	})
+	pub.Assets["checkend-migrations-0.4.0.tar.gz"] = bad
+	r := cli.Run([]string{"install", "cloudflare", "--yes"}, Options{Env: env})
+	Code(t, r, 1)
+	Contains(t, r.Stderr, "invalid file name")
+	Equal(t, len(cf.Databases), 0)
+}

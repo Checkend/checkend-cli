@@ -43,6 +43,7 @@ var tokenPermissions = []map[string]string{
 var (
 	workerNamePattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 	accountPattern    = regexp.MustCompile(`^[A-Za-z0-9]{1,64}$`)
+	migrationFile     = regexp.MustCompile(`^\d{4}_[a-z0-9_]+\.sql$`)
 )
 
 // tokenTemplate is the link that opens the API token form of the dashboard, filled in.
@@ -430,6 +431,9 @@ func installCloudflareCommand() *Command {
 			var known []string
 			for file := range migrationFiles {
 				if n, ok := strings.CutPrefix(file, "migrations/"); ok && strings.HasSuffix(n, ".sql") {
+					if !migrationFile.MatchString(n) {
+						return clierr.Fail(fmt.Sprintf("The migrations of the release have an invalid file name %q.", n))
+					}
 					known = append(known, n)
 				}
 			}
@@ -547,7 +551,7 @@ func installCloudflareCommand() *Command {
 				if !strings.HasSuffix(sql, ";") {
 					sql += ";"
 				}
-				// The name matches ^\d{4}_[a-z0-9_]+\.sql$ (checked with the manifest), so it is safe in SQL text.
+				// The name matches migrationFile (checked above), so it is safe in SQL text.
 				sql += "\nINSERT INTO d1_migrations (name) VALUES ('" + n + "');"
 				if _, err := c.query(acc, db.id, sql); err != nil {
 					return cfFail(err, fmt.Sprintf("Migration %s failed. To go back: npx wrangler d1 time-travel restore %s --bookmark=%s", n, database, bookmark.Bookmark))
