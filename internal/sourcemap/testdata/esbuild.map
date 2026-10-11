@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../../../../../private/var/folders/09/g3klyjkn5j37hwpclmyjcxhw0000gn/T/ce-esbuild-fa8FQY/app.ts"],
+  "sourcesContent": ["interface User { id: number; name: string }\nexport function loadUser(users: User[], id: number): string {\n  const user = users.find((u) => u.id === id);\n  return user!.name.toUpperCase();\n}\nconsole.log(loadUser([{ id: 1, name: '\u00E9' }], 2));\n"],
+  "mappings": "MACO,SAASA,EAASC,EAAeC,EAAoB,CAE1D,OADaD,EAAM,KAAME,GAAMA,EAAE,KAAOD,CAAE,EAC7B,KAAK,YAAY,CAChC,CACA,QAAQ,IAAIF,EAAS,CAAC,CAAE,GAAI,EAAG,KAAM,MAAI,CAAC,EAAG,CAAC,CAAC",
+  "names": ["loadUser", "users", "id", "u"]
+}
