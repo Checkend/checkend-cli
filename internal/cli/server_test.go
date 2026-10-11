@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -23,6 +24,9 @@ func dockerHost(cli *Harness, running *bool) {
 				return []byte("c0ffee\n"), nil
 			}
 			return nil, nil
+		case strings.Contains(joined, " cp checkend:"):
+			// docker compose cp keeps the mode of the file in the container.
+			return nil, os.WriteFile(args[len(args)-1], []byte("SQLite format 3\x00"), 0o644)
 		case strings.Contains(joined, "scripts/backup.ts"):
 			if !*running {
 				return nil, errors.New("service checkend is not running")
@@ -126,6 +130,9 @@ func TestBackupDocker(t *testing.T) {
 	Matches(t, file, `^/data/backups/checkend-\d{8}-\d{6}\.sqlite$`)
 	Contains(t, strings.Join(dockerArgs(cli), "\n"), "--project-directory "+dir+" cp checkend:"+file+" "+out)
 	Equal(t, r.JSON(t)["output"], out)
+	if info, err := os.Stat(out); err != nil || runtime.GOOS != "windows" && info.Mode().Perm() != 0o600 {
+		t.Errorf("the copy of the backup: %v, %v", info, err)
+	}
 }
 
 func TestStatusServerShowsTheInstallAndTheLatestRelease(t *testing.T) {

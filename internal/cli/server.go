@@ -181,6 +181,10 @@ func backupCommand() *Command {
 					if _, err := dockerCompose(s, rec.Dir, "cp", "checkend:"+file, output); err != nil {
 						return clierr.Fail(fmt.Sprintf("The backup is %s in the volume, but the copy failed: %v", file, err))
 					}
+					// docker compose cp keeps the mode of the container; the copy has all the data.
+					if err := os.Chmod(output, 0o600); err != nil {
+						return clierr.Fail(fmt.Sprintf("Cannot make %s private (mode 600): %v", output, err))
+					}
 					result["output"] = output
 				}
 			case "ssh":
