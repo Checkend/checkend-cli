@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -102,6 +103,10 @@ func environ() map[string]string {
 
 func main() {
 	cwd, _ := os.Getwd()
+	exe, _ := os.Executable()
+	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = resolved
+	}
 	home, _ := os.UserHomeDir()
 	stdout := writer(os.Stdout)
 	h := &host.Host{
@@ -119,6 +124,7 @@ func main() {
 		Git:         git,
 		Run:         run,
 		LookupHost:  net.LookupHost,
+		Executable:  exe,
 	}
 	os.Exit(cli.Run(os.Args[1:], h))
 }

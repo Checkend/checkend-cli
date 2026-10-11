@@ -52,7 +52,7 @@ func installedDocker(t *testing.T) (*FakeReleases, *Harness, string, *bool) {
 	f.Publish("0.3.0")
 	running := false
 	dockerHost(cli, &running)
-	Code(t, cli.Run([]string{"install", "docker", "--yes"}), 0)
+	Code(t, cli.Run([]string{"server", "install", "docker", "--yes"}), 0)
 	return f, cli, filepath.Join(cli.Repo, "checkend"), &running
 }
 
@@ -61,7 +61,7 @@ func TestUpgradeDockerPinsTheNewImageAndKeepsTheSetupCode(t *testing.T) {
 	before := readEnv(t, filepath.Join(dir, ".env"))
 	rel := f.Publish("0.4.0")
 	*running = true
-	r := cli.Run([]string{"upgrade", "--yes"})
+	r := cli.Run([]string{"server", "upgrade", "--yes"})
 	Code(t, r, 0)
 	compose, _ := os.ReadFile(filepath.Join(dir, "compose.yaml"))
 	Contains(t, string(compose), rel.Manifest["image"].(map[string]any)["digest"].(string))
@@ -84,7 +84,7 @@ func TestUpgradeDockerPinsTheNewImageAndKeepsTheSetupCode(t *testing.T) {
 	Equal(t, r.JSON(t)["version"], "0.4.0")
 
 	// Again: nothing to do.
-	r = cli.Run([]string{"upgrade", "--yes"})
+	r = cli.Run([]string{"server", "upgrade", "--yes"})
 	Code(t, r, 0)
 	Contains(t, r.Stdout, "already")
 }
@@ -92,39 +92,39 @@ func TestUpgradeDockerPinsTheNewImageAndKeepsTheSetupCode(t *testing.T) {
 func TestUpgradeRefusesADowngradeAndOlderMigrations(t *testing.T) {
 	f, cli, _, _ := installedDocker(t)
 	f.Publish("0.2.0")
-	r := cli.Run([]string{"upgrade", "--yes", "--version", "0.2.0"})
+	r := cli.Run([]string{"server", "upgrade", "--yes", "--version", "0.2.0"})
 	Code(t, r, 1)
 	Contains(t, r.Stderr, "--allow-downgrade")
-	Code(t, cli.Run([]string{"upgrade", "--yes", "--version", "0.2.0", "--allow-downgrade"}), 0)
+	Code(t, cli.Run([]string{"server", "upgrade", "--yes", "--version", "0.2.0", "--allow-downgrade"}), 0)
 
 	f.Publish("0.1.0", func(m map[string]any) {
 		m["migrations"].(map[string]any)["latest"] = "0001_init.sql"
 	})
-	r = cli.Run([]string{"upgrade", "--yes", "--version", "0.1.0", "--allow-downgrade"})
+	r = cli.Run([]string{"server", "upgrade", "--yes", "--version", "0.1.0", "--allow-downgrade"})
 	Code(t, r, 1)
 	Contains(t, r.Stderr, "never run backwards")
 }
 
 func TestServerCommandsNeedAnInstallRecord(t *testing.T) {
 	_, cli := installer(t)
-	for _, argv := range [][]string{{"upgrade", "--yes"}, {"backup"}, {"uninstall", "--yes"}} {
+	for _, argv := range [][]string{{"server", "upgrade", "--yes"}, {"server", "backup"}, {"server", "uninstall", "--yes"}} {
 		r := cli.Run(append(argv, "--url", "https://errors.example.com"))
 		Code(t, r, 1)
-		Contains(t, r.Stderr, "ce install")
+		Contains(t, r.Stderr, "ce server install")
 	}
-	r := cli.Run([]string{"status", "--server", "--url", "https://errors.example.com"})
+	r := cli.Run([]string{"server", "status", "--url", "https://errors.example.com"})
 	Code(t, r, 1)
-	Code(t, cli.Run([]string{"uninstall", "--url", "https://errors.example.com"}), 2)
+	Code(t, cli.Run([]string{"server", "uninstall", "--url", "https://errors.example.com"}), 2)
 }
 
 func TestBackupDocker(t *testing.T) {
 	_, cli, dir, running := installedDocker(t)
-	r := cli.Run([]string{"backup"})
+	r := cli.Run([]string{"server", "backup"})
 	Code(t, r, 1)
 	Contains(t, r.Stderr, "not running")
 	*running = true
 	out := filepath.Join(t.TempDir(), "copy.sqlite")
-	r = cli.Run([]string{"backup", "--output", out})
+	r = cli.Run([]string{"server", "backup", "--output", out})
 	Code(t, r, 0)
 	file := r.JSON(t)["file"].(string)
 	Matches(t, file, `^/data/backups/checkend-\d{8}-\d{6}\.sqlite$`)
@@ -140,9 +140,9 @@ func TestStatusServerShowsTheInstallAndTheLatestRelease(t *testing.T) {
 	f.Publish("0.3.0")
 	api := NewFakeAPI(t)
 	port := api.URL[strings.LastIndex(api.URL, ":")+1:]
-	Code(t, cli.Run([]string{"install", "docker", "--yes", "--port", port}), 0)
+	Code(t, cli.Run([]string{"server", "install", "docker", "--yes", "--port", port}), 0)
 	f.Publish("0.4.0")
-	r := cli.Run([]string{"status", "--server", "--url", "http://localhost:" + port})
+	r := cli.Run([]string{"server", "status", "--url", "http://localhost:" + port})
 	Code(t, r, 0)
 	out := r.JSON(t)
 	Equal(t, out["health"].(map[string]any)["status"], "ok")
@@ -155,10 +155,10 @@ func TestStatusServerShowsTheInstallAndTheLatestRelease(t *testing.T) {
 
 func TestUninstallDockerKeepsTheDataUnlessAsked(t *testing.T) {
 	_, cli, dir, _ := installedDocker(t)
-	r := cli.Run([]string{"uninstall"}, Options{TTY: true, Answers: []string{"nope"}})
+	r := cli.Run([]string{"server", "uninstall"}, Options{TTY: true, Answers: []string{"nope"}})
 	Code(t, r, 2)
 	Equal(t, len(dockerArgs(cli)), 0)
-	r = cli.Run([]string{"uninstall", "--yes"})
+	r = cli.Run([]string{"server", "uninstall", "--yes"})
 	Code(t, r, 0)
 	Equal(t, dockerArgs(cli), []string{"compose --project-directory " + dir + " down"})
 	if !Exists(filepath.Join(dir, ".env")) {
@@ -166,12 +166,12 @@ func TestUninstallDockerKeepsTheDataUnlessAsked(t *testing.T) {
 	}
 	_, ok := cli.Keyring.Secrets["http://localhost:8787"]
 	Equal(t, ok, false)
-	Code(t, cli.Run([]string{"backup", "--url", "http://localhost:8787"}), 1)
+	Code(t, cli.Run([]string{"server", "backup", "--url", "http://localhost:8787"}), 1)
 }
 
 func TestUninstallDockerWithItsData(t *testing.T) {
 	_, cli, dir, _ := installedDocker(t)
-	r := cli.Run([]string{"uninstall", "--delete-data"}, Options{TTY: true, Answers: []string{"delete http://localhost:8787"}})
+	r := cli.Run([]string{"server", "uninstall", "--delete-data"}, Options{TTY: true, Answers: []string{"delete http://localhost:8787"}})
 	Code(t, r, 0)
 	Equal(t, dockerArgs(cli), []string{"compose --project-directory " + dir + " down -v"})
 	if Exists(filepath.Join(dir, ".env")) || Exists(filepath.Join(dir, "compose.yaml")) {
@@ -184,7 +184,7 @@ func TestUpgradeAndBackupSSH(t *testing.T) {
 	Code(t, cli.Run(append(sshArgs, "--yes", "--host-key", hostFingerprint())), 0)
 	before := readEnv(t, writeTemp(t, srv.env))
 	f.Publish("0.4.0")
-	r := cli.Run([]string{"upgrade", "--yes"})
+	r := cli.Run([]string{"server", "upgrade", "--yes"})
 	Code(t, r, 0)
 	script := srv.installed[len(srv.installed)-1]
 	Contains(t, script, "scripts/backup.ts /data/backups/checkend-before-0.4.0-")
@@ -199,23 +199,23 @@ func TestUpgradeAndBackupSSH(t *testing.T) {
 	hostBlob = strings.Replace(hostBlob, "A", "B", 1)
 	defer func() { hostBlob = old }()
 	f.Publish("0.5.0")
-	r = cli.Run([]string{"upgrade", "--yes"})
+	r = cli.Run([]string{"server", "upgrade", "--yes"})
 	Code(t, r, 1)
 	Contains(t, r.Stderr, "does not match")
 }
 
 func TestUpgradeCloudflareKeepsTheSetupCodeAndRecordsABookmark(t *testing.T) {
 	f, cf, cli, env := cloudflare(t)
-	Code(t, cli.Run([]string{"install", "cloudflare", "--yes"}, Options{Env: env}), 0)
+	Code(t, cli.Run([]string{"server", "install", "cloudflare", "--yes"}, Options{Env: env}), 0)
 	code := cf.Scripts["checkend"].Secrets["SETUP_CODE"]
 	f.Publish("0.4.0")
-	r := cli.Run([]string{"upgrade", "--yes"}, Options{Env: env})
+	r := cli.Run([]string{"server", "upgrade", "--yes"}, Options{Env: env})
 	Code(t, r, 0)
 	Equal(t, cf.Scripts["checkend"].Secrets["SETUP_CODE"], code)
 	Contains(t, cf.Scripts["checkend"].Modules["worker.js"], "v0.4.0")
 	Equal(t, cf.DB("checkend").Bookmarks, 2)
 
-	r = cli.Run([]string{"backup"}, Options{Env: env})
+	r = cli.Run([]string{"server", "backup"}, Options{Env: env})
 	Code(t, r, 0)
 	Equal(t, cf.DB("checkend").Bookmarks, 3)
 	Contains(t, r.JSON(t)["restore"].(string), "npx wrangler d1 time-travel restore checkend --bookmark=00000003")
@@ -223,8 +223,8 @@ func TestUpgradeCloudflareKeepsTheSetupCodeAndRecordsABookmark(t *testing.T) {
 
 func TestUninstallCloudflare(t *testing.T) {
 	_, cf, cli, env := cloudflare(t)
-	Code(t, cli.Run([]string{"install", "cloudflare", "--yes"}, Options{Env: env}), 0)
-	r := cli.Run([]string{"uninstall", "--yes"}, Options{Env: env})
+	Code(t, cli.Run([]string{"server", "install", "cloudflare", "--yes"}, Options{Env: env}), 0)
+	r := cli.Run([]string{"server", "uninstall", "--yes"}, Options{Env: env})
 	Code(t, r, 0)
 	Equal(t, len(cf.Scripts), 0)
 	Equal(t, len(cf.Databases), 1)

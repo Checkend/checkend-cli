@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/Checkend/checkend-cli/internal/clierr"
+	"github.com/Checkend/checkend-cli/internal/docs"
 	"github.com/Checkend/checkend-cli/internal/host"
 	"github.com/Checkend/checkend-cli/internal/output"
 	"github.com/Checkend/checkend-cli/internal/sanitize"
@@ -22,11 +23,49 @@ var globalOptions = map[string]Kind{
 	"help":  Bool,
 }
 
-// commands lists only commands whose server API exists (and so they are in --help).
+// commands lists only commands whose server API exists (and so they are in --help), plus the
+// hidden old names of the server commands.
 func commands() []*Command {
-	return slices.Concat(authCommands(), setupCommands(), []*Command{mcpCommand(), initCommand(), nextCommand(), deployCommand(), migrateCommand()},
+	list := slices.Concat(authCommands(), setupCommands(), []*Command{mcpCommand(), initCommand(), nextCommand(), deployCommand(), migrateCommand()},
 		issueCommands(), eventCommands(), projectCommands(), []*Command{dsnRotateCommand(), sourcemapsUploadCommand()},
 		installCommands(), serverCommands())
+	for _, c := range list {
+		if c.Docs == "" {
+			c.Docs = commandDocs[c.Path[0]]
+		}
+	}
+	return append(list, oldNames(list)...)
+}
+
+// Commands is the command table, for the tests.
+func Commands() []*Command { return commands() }
+
+// commandDocs is the docs section of each group of commands that has no own section.
+var commandDocs = map[string]docs.Topic{
+	"login": docs.Authentication, "logout": docs.Authentication, "status": docs.Authentication,
+	"setup": docs.AgentSetup, "mcp": docs.MCP, "init": docs.Projects, "next": docs.Issues,
+	"deploy": docs.Deploys, "migrate-from-sentry": docs.SendingErrors, "issue": docs.Issues,
+	"event": docs.Issues, "project": docs.Projects, "dsn": docs.Projects, "sourcemaps": docs.SourceMaps,
+	"server": docs.SelfHost,
+}
+
+// oldNames are the names of the server commands before `ce server`: they work for one more
+// release, hidden, with a hint.
+func oldNames(list []*Command) []*Command {
+	var out []*Command
+	for _, c := range list {
+		if len(c.Path) < 2 || c.Path[0] != "server" || c.Path[1] == "status" {
+			continue
+		}
+		old, now := *c, c
+		old.Path, old.Hidden = c.Path[1:], true
+		old.Run = func(s *Session) error {
+			s.Out.Notice(fmt.Sprintf("`ce %s` is now `ce %s`. The old name goes away in the next release.", strings.Join(old.Path, " "), strings.Join(now.Path, " ")))
+			return now.Run(s)
+		}
+		out = append(out, &old)
+	}
+	return out
 }
 
 var groups = map[string]string{
@@ -35,7 +74,7 @@ var groups = map[string]string{
 	"project":    "Create, list and delete projects; print a DSN",
 	"dsn":        "Rotate the DSN of a project",
 	"sourcemaps": "Upload source maps",
-	"install":    "Install a released Checkend server (Docker, a server over SSH, Cloudflare)",
+	"server":     "Run your own Checkend server: install, upgrade, back up, status, uninstall",
 }
 
 // Run runs `ce argv...` and returns the exit code.
@@ -83,52 +122,96 @@ func dispatch(argv []string, h *host.Host, out *output.Output) error {
 		return nil
 	}
 	if strings.HasPrefix(first, "-") {
-		return clierr.UsageError("Give a command before the options.")
+		return clierr.UsageError("Give a command before the options.").WithDocs(docs.QuickStart)
 	}
-	var group []*Command
-	for _, c := range commands() {
-		if c.Path[0] == first {
-			group = append(group, c)
-		}
-	}
-	if len(group) == 0 {
-		return clierr.UsageError(fmt.Sprintf("Unknown command %q.", sanitize.OneLine(first)))
-	}
+	all := commands()
+	// The command with the longest path that starts argv: `ce server install docker`, `ce setup`.
 	var command *Command
-	rest := argv[1:]
-	for _, c := range group {
-		if len(c.Path) == 1 {
+	for _, c := range all {
+		if len(argv) >= len(c.Path) && slices.Equal(argv[:len(c.Path)], c.Path) && (command == nil || len(c.Path) > len(command.Path)) {
 			command = c
 		}
 	}
-	// A command can also have subcommands, for example `ce setup` and `ce setup report`.
-	if command != nil && len(argv) > 1 {
-		for _, c := range group {
-			if len(c.Path) == 2 && c.Path[1] == argv[1] {
-				command, rest = c, argv[2:]
-			}
-		}
+	// How many words of argv name a group of commands (`ce server`, `ce server install`).
+	depth := 0
+	for depth < len(argv) && len(groupOf(all, argv[:depth+1])) > 0 {
+		depth++
 	}
-	if command == nil {
-		if len(argv) < 2 {
-			return clierr.UsageError(fmt.Sprintf("%q needs a subcommand.", "ce "+first), fmt.Sprintf("Run `ce %s --help`.", first))
+	if command == nil || depth > len(command.Path) {
+		if depth == 0 {
+			return clierr.UsageError(fmt.Sprintf("Unknown command %q.", sanitize.OneLine(first))).WithDocs(docs.QuickStart)
 		}
-		second := argv[1]
-		if isHelp(second) {
-			out.Write(groupHelp(first, group))
+		prefix := argv[:depth]
+		group := groupOf(all, prefix)
+		topic := group[0].Docs
+		if depth == len(argv) || !isHelp(argv[depth]) && strings.HasPrefix(argv[depth], "-") {
+			return needsSubcommand(prefix, group).WithDocs(groupDocs(prefix, topic))
+		}
+		if isHelp(argv[depth]) {
+			out.Write(groupHelp(prefix, group))
 			return nil
 		}
-		for _, c := range group {
-			if c.Path[1] == second {
-				command = c
-			}
-		}
-		if command == nil {
-			return clierr.UsageError(fmt.Sprintf("Unknown command %q.", "ce "+first+" "+sanitize.OneLine(second)), fmt.Sprintf("Run `ce %s --help`.", first))
-		}
-		rest = argv[2:]
+		return clierr.UsageError(fmt.Sprintf("Unknown command %q.", "ce "+strings.Join(prefix, " ")+" "+sanitize.OneLine(argv[depth])),
+			fmt.Sprintf("Run `ce %s --help`.", strings.Join(prefix, " "))).WithDocs(groupDocs(prefix, topic))
 	}
+	return withDocs(runCommand(command, argv[len(command.Path):], h, out), command.Docs)
+}
 
+// groupOf are the visible commands under prefix (or the hidden ones of a hidden old name), with
+// a longer path than prefix.
+func groupOf(all []*Command, prefix []string) []*Command {
+	var group []*Command
+	for _, c := range all {
+		if len(c.Path) > len(prefix) && slices.Equal(c.Path[:len(prefix)], prefix) {
+			group = append(group, c)
+		}
+	}
+	visible := slices.DeleteFunc(slices.Clone(group), func(c *Command) bool { return c.Hidden })
+	if len(visible) > 0 {
+		return visible
+	}
+	return group
+}
+
+// groupDocs is the docs topic of a group: the self-host guide for the server commands.
+func groupDocs(prefix []string, fallback docs.Topic) docs.Topic {
+	if prefix[0] == "server" || prefix[0] == "install" {
+		return docs.SelfHost
+	}
+	return fallback
+}
+
+// installTargets is the help of `ce server install` without a target.
+const installTargets = `Choose where to install the Checkend server:
+  ce server install docker                               on this machine, with Docker
+  ce server install ssh <user@host> --domain <domain>    on your Ubuntu or Debian server, over SSH
+  ce server install cloudflare                           on your Cloudflare account (a Worker and D1)`
+
+func needsSubcommand(prefix []string, group []*Command) *clierr.Error {
+	if prefix[len(prefix)-1] == "install" {
+		return clierr.UsageError("ce server install needs a target.", installTargets)
+	}
+	var lines []string
+	for _, c := range group {
+		lines = append(lines, "  "+strings.TrimRight(name(c)+" "+c.Usage, " "))
+	}
+	return clierr.UsageError(fmt.Sprintf("%q needs a subcommand.", "ce "+strings.Join(prefix, " ")),
+		"Use one of:\n"+strings.Join(lines, "\n"))
+}
+
+// withDocs gives an error the docs topic of its command when it has none.
+func withDocs(err error, topic docs.Topic) error {
+	var cerr *clierr.Error
+	if err != nil && errors.As(err, &cerr) {
+		if cerr.Docs == "" {
+			cerr.Docs = topic
+		}
+		return cerr
+	}
+	return err
+}
+
+func runCommand(command *Command, rest []string, h *host.Host, out *output.Output) error {
 	options := map[string]Kind{}
 	for k, v := range globalOptions {
 		options[k] = v
@@ -169,6 +252,9 @@ func mainHelp() string {
 	var labels, summaries []string
 	width := 0
 	for _, c := range commands() {
+		if c.Hidden {
+			continue
+		}
 		head := c.Path[0]
 		if seen[head] {
 			continue
@@ -206,12 +292,16 @@ Exit codes: 0 OK, 1 error, 2 usage, 3 not found, 4 conflict, 5 authentication,
 `, version.Version, strings.Join(lines, "\n"))
 }
 
-func groupHelp(head string, group []*Command) string {
+func groupHelp(prefix []string, group []*Command) string {
 	var lines []string
 	for _, c := range group {
 		lines = append(lines, fmt.Sprintf("  %s\n      %s", strings.TrimRight(name(c)+" "+c.Usage, " "), c.Summary))
 	}
-	return fmt.Sprintf("%s\n\nUsage:\n%s\n", groups[head], strings.Join(lines, "\n"))
+	title := groups[prefix[0]]
+	if len(prefix) > 1 || title == "" {
+		title = "ce " + strings.Join(prefix, " ")
+	}
+	return fmt.Sprintf("%s\n\nUsage:\n%s\n", title, strings.Join(lines, "\n"))
 }
 
 func commandHelp(c *Command) string {

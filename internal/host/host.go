@@ -38,6 +38,10 @@ type Host struct {
 	// keys (tests only; a release build leaves them empty).
 	ReleaseAPI  string
 	ReleaseKeys map[string][]byte
+	// Executable is the path of the running ce, with symlinks resolved (for `ce update`).
+	Executable string
+	// CLIReleaseAPI replaces the GitHub API of the CLI repo (tests only).
+	CLIReleaseAPI string
 	// CloudflareAPI replaces https://api.cloudflare.com/client/v4 (tests only).
 	CloudflareAPI string
 	// Run runs a program (ssh, ssh-keyscan, docker) with stdin and returns its stdout. Tests

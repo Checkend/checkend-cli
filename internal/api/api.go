@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/Checkend/checkend-cli/internal/clierr"
+	"github.com/Checkend/checkend-cli/internal/docs"
 	"github.com/Checkend/checkend-cli/internal/host"
 	"github.com/Checkend/checkend-cli/internal/sanitize"
 	"github.com/Checkend/checkend-cli/internal/version"
@@ -225,7 +226,10 @@ func (c *Client) httpError(resp response) error {
 		code += ": " + sanitize.OneLine(reason)
 	}
 	switch resp.status {
-	case 400, 413, 415, 422:
+	case 413:
+		return clierr.New(clierr.Usage, "The request is too large for the server ("+sanitize.OneLine(code)+").",
+			"Send less: fewer or smaller files, or a smaller body.").WithDocs(docs.RequestLimits)
+	case 400, 415, 422:
 		text := code
 		if len(body.Details) > 0 {
 			var parts []string
@@ -234,9 +238,12 @@ func (c *Client) httpError(resp response) error {
 			}
 			text = strings.Join(parts, "; ")
 		}
-		return clierr.New(clierr.Usage, "Invalid request: "+sanitize.OneLine(text), "")
-	case 401, 403:
-		return clierr.New(clierr.Auth, fmt.Sprintf("%s rejected the token.", c.URL), "Run `ce login` to save a valid token.")
+		return clierr.New(clierr.Usage, "Invalid request: "+sanitize.OneLine(text), "Check the options of the command with --help.").WithDocs(docs.APIErrors)
+	case 401:
+		return clierr.New(clierr.Auth, fmt.Sprintf("%s rejected the token.", c.URL), "Run `ce login` to save a valid token.").WithDocs(docs.Authentication)
+	case 403:
+		return clierr.New(clierr.Auth, fmt.Sprintf("The token has no permission for this at %s.", c.URL),
+			"Use a token with the scope that this command needs, or run `ce login` with another token.").WithDocs(docs.Scopes)
 	case 404:
 		return &NotFound{Code: code}
 	case 409:
@@ -246,13 +253,13 @@ func (c *Client) httpError(resp response) error {
 		return clierr.New(clierr.Conflict, "Conflict: "+code, "")
 	case 429:
 		if message, ok := body.Message.(string); ok && message != "" {
-			return clierr.Fail(sanitize.OneLine(message))
+			return clierr.New(clierr.Failure, sanitize.OneLine(message), "Wait a minute, then try again.").WithDocs(docs.BackPressure)
 		}
 		after := resp.retryAfter
 		if after == "" {
 			after = "a few"
 		}
-		return clierr.New(clierr.Failure, "Too many requests.", fmt.Sprintf("Try again in %s seconds.", sanitize.OneLine(after)))
+		return clierr.New(clierr.Failure, "Too many requests.", fmt.Sprintf("Try again in %s seconds.", sanitize.OneLine(after))).WithDocs(docs.BackPressure)
 	default:
 		msg := fmt.Sprintf("The server answered HTTP %d", resp.status)
 		if code != "" {

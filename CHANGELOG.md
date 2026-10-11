@@ -54,6 +54,13 @@ The first release. Nothing is tagged or published yet. Until then, build `ce` fr
   bookmark), keeps the secrets and the setup code, and refuses a downgrade unless
   `--allow-downgrade`; an older migration level is always refused. An uninstall keeps the data
   unless `--delete-data`.
+- The server commands are under `ce server`: `ce server install docker|ssh|cloudflare`,
+  `ce server upgrade`, `ce server backup`, `ce server status` and `ce server uninstall`. The old
+  names still work in this release, hidden from the help, with a hint to the new name.
+  `ce server install` without a target lists the three targets. On a hosted space (a URL with a
+  base path) the server commands say that the space updates itself.
+- Every error ends with a link to the docs section that explains it; JSON errors have `"docs"`
+  next to `"error"` and `"hint"`.
 - Install methods for the first release: Homebrew, `install.sh` and the npm wrapper
   `@checkend/cli`. Each one checks the SHA-256 of the binary.
 

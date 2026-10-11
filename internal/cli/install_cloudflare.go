@@ -21,6 +21,7 @@ import (
 	"github.com/Checkend/checkend-cli/internal/clierr"
 	"github.com/Checkend/checkend-cli/internal/config"
 	"github.com/Checkend/checkend-cli/internal/credstore"
+	"github.com/Checkend/checkend-cli/internal/docs"
 	"github.com/Checkend/checkend-cli/internal/sanitize"
 	"github.com/Checkend/checkend-cli/internal/serverrelease"
 	"github.com/Checkend/checkend-cli/internal/version"
@@ -217,7 +218,7 @@ func cloudflareToken(s *Session, r2 bool) (token string, fresh bool, err error) 
 	}
 	link := tokenTemplate(r2)
 	if !s.Host.Interactive {
-		return "", false, clierr.UsageError("ce install cloudflare needs a Cloudflare API token.",
+		return "", false, clierr.UsageError("ce server install cloudflare needs a Cloudflare API token.",
 			"Make one with this link (the permissions are filled in), then set CLOUDFLARE_API_TOKEN:\n"+link)
 	}
 	s.Out.Menu([]string{"ce needs a Cloudflare API token. Open this link: the permissions are filled in", "(Workers Scripts edit, D1 edit, Account Settings read). Then create the token and paste it.", "  " + link})
@@ -361,7 +362,8 @@ func inspectWorker(c *cfClient, account, name string) (workerState, error) {
 
 func installCloudflareCommand() *Command {
 	return &Command{
-		Path:    []string{"install", "cloudflare"},
+		Path:    []string{"server", "install", "cloudflare"},
+		Docs:    docs.DeployCloudflare,
 		Summary: "Install Checkend on your Cloudflare account (a Worker and D1)",
 		Usage:   "[--account <id>] [--name <worker>] [--database <name>] [--r2] [--version <v>] [--yes]",
 		Details: []string{
@@ -394,7 +396,7 @@ func installCloudflareCommand() *Command {
 			if a := s.String("account"); a != "" && !accountPattern.MatchString(a) {
 				return clierr.UsageError(fmt.Sprintf("%q is not a Cloudflare account ID.", a), "Find it in the URL of the dashboard.")
 			}
-			if err := needApproval(s, "ce install cloudflare"); err != nil {
+			if err := needApproval(s, "ce server install cloudflare"); err != nil {
 				return err
 			}
 			token, fresh, err := cloudflareToken(s, s.Bool("r2"))

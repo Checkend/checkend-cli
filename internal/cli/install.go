@@ -14,6 +14,7 @@ import (
 
 	"github.com/Checkend/checkend-cli/internal/clierr"
 	"github.com/Checkend/checkend-cli/internal/config"
+	"github.com/Checkend/checkend-cli/internal/docs"
 	"github.com/Checkend/checkend-cli/internal/serverrelease"
 )
 
@@ -34,7 +35,7 @@ func releaseSource(s *Session) serverrelease.Source {
 	return src
 }
 
-// pickRelease is the release of --version, else the latest one. For `ce upgrade`, it refuses
+// pickRelease is the release of --version, else the latest one. For `ce server upgrade`, it refuses
 // a downgrade (unless --allow-downgrade) and always an older migration level.
 func pickRelease(s *Session) (*serverrelease.Release, error) {
 	var rel *serverrelease.Release
@@ -50,7 +51,7 @@ func pickRelease(s *Session) (*serverrelease.Release, error) {
 	return rel, checkUpgrade(s.upgrade, &rel.Manifest, s.allowDowngrade)
 }
 
-// errUpToDate ends `ce upgrade` when the install has the release already.
+// errUpToDate ends `ce server upgrade` when the install has the release already.
 var errUpToDate = errors.New("up to date")
 
 // checkUpgrade compares a release with the installed one. Migrations are forward-only, so a
@@ -65,7 +66,7 @@ func checkUpgrade(installed *config.Install, m *serverrelease.Manifest, allowDow
 	case -1:
 		if !allowDowngrade {
 			return clierr.New(clierr.Failure, fmt.Sprintf("Checkend %s is older than the installed %s.", m.Version, installed.Version),
-				"Run `ce upgrade --version "+m.Version+" --allow-downgrade` if you mean it (the data stays at its migration level).")
+				"Run `ce server upgrade --version "+m.Version+" --allow-downgrade` if you mean it (the data stays at its migration level).")
 		}
 	case 0:
 		if m.Migrations.Latest == installed.Migrations || installed.Migrations == "" {
@@ -161,7 +162,7 @@ func (e *envFile) set(k, v string) {
 
 func (e *envFile) String() string {
 	var b strings.Builder
-	b.WriteString("# Checkend settings, written by `ce install`. Secrets: keep this file private (mode 600).\n")
+	b.WriteString("# Checkend settings, written by `ce server install`. Secrets: keep this file private (mode 600).\n")
 	for _, k := range e.keys {
 		fmt.Fprintf(&b, "%s=%s\n", k, e.values[k])
 	}
@@ -222,7 +223,7 @@ type composeOptions struct {
 // compose is compose.yaml: Checkend, a nightly backup, a volume and restarts.
 func compose(o composeOptions) string {
 	var b strings.Builder
-	b.WriteString("# Checkend, written by `ce install`. The image is pinned by its digest; `ce upgrade` changes it.\n")
+	b.WriteString("# Checkend, written by `ce server install`. The image is pinned by its digest; `ce server upgrade` changes it.\n")
 	b.WriteString("services:\n  checkend:\n")
 	fmt.Fprintf(&b, "    image: %s\n    restart: unless-stopped\n    env_file: .env\n", o.Image)
 	if o.Port > 0 {
@@ -353,7 +354,8 @@ func portOption(s *Session, fallback int) (int, error) {
 
 func installDockerCommand() *Command {
 	return &Command{
-		Path:    []string{"install", "docker"},
+		Path:    []string{"server", "install", "docker"},
+		Docs:    docs.SelfHostDocker,
 		Summary: "Write compose.yaml and .env for Checkend with Docker on this machine",
 		Usage:   "[--dir <dir>] [--port <port>] [--version <v>] [--yes]",
 		Details: []string{
@@ -372,7 +374,7 @@ func installDockerCommand() *Command {
 			if err != nil {
 				return err
 			}
-			if err := needApproval(s, "ce install docker"); err != nil {
+			if err := needApproval(s, "ce server install docker"); err != nil {
 				return err
 			}
 			dir := s.String("dir")

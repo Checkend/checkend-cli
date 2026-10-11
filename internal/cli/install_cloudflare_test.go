@@ -20,7 +20,7 @@ const workerURL = "https://checkend.example.workers.dev"
 
 func TestInstallCloudflareNeedsAnAPITokenFromTheTemplateLink(t *testing.T) {
 	_, cf, cli, _ := cloudflare(t)
-	r := cli.Run([]string{"install", "cloudflare", "--yes"})
+	r := cli.Run([]string{"server", "install", "cloudflare", "--yes"})
 	Code(t, r, 2)
 	link := regexpFind(t, r.ErrJSON(t)["hint"].(string), `https://dash\.cloudflare\.com/profile/api-tokens\?\S+`)
 	u, err := url.Parse(link)
@@ -32,13 +32,13 @@ func TestInstallCloudflareNeedsAnAPITokenFromTheTemplateLink(t *testing.T) {
 	Equal(t, len(cf.Calls), 0)
 
 	// On a terminal it asks for the token (hidden) and keeps it in the keychain.
-	r = cli.Run([]string{"install", "cloudflare"}, Options{TTY: true, Answers: []string{cf.Token, "y"}})
+	r = cli.Run([]string{"server", "install", "cloudflare"}, Options{TTY: true, Answers: []string{cf.Token, "y"}})
 	Code(t, r, 0)
 	Equal(t, cli.Prompts[0].Secret, true)
 	Equal(t, cli.Keyring.Secrets["cloudflare:api-token"], cf.Token)
 	NotContains(t, r.All, cf.Token)
 	// The next run uses the token of the keychain.
-	Code(t, cli.Run([]string{"install", "cloudflare", "--yes"}), 0)
+	Code(t, cli.Run([]string{"server", "install", "cloudflare", "--yes"}), 0)
 }
 
 func regexpFind(t *testing.T, text, pattern string) string {
@@ -54,7 +54,7 @@ func regexpFind(t *testing.T, text, pattern string) string {
 
 func TestInstallCloudflareCreatesD1MigratesUploadsAndSetsSecrets(t *testing.T) {
 	_, cf, cli, env := cloudflare(t)
-	r := cli.Run([]string{"install", "cloudflare", "--yes"}, Options{Env: env})
+	r := cli.Run([]string{"server", "install", "cloudflare", "--yes"}, Options{Env: env})
 	Code(t, r, 0)
 	db := cf.DB("checkend")
 	if db == nil {
@@ -110,7 +110,7 @@ func indexOf(list []string, s string) int {
 
 func TestInstallCloudflareAgainKeepsTheSecretsAndMigratesOnlyWhatIsNew(t *testing.T) {
 	f, cf, cli, env := cloudflare(t)
-	Code(t, cli.Run([]string{"install", "cloudflare", "--yes"}, Options{Env: env}), 0)
+	Code(t, cli.Run([]string{"server", "install", "cloudflare", "--yes"}, Options{Env: env}), 0)
 	first := map[string]string{}
 	for k, v := range cf.Scripts["checkend"].Secrets {
 		first[k] = v
@@ -119,7 +119,7 @@ func TestInstallCloudflareAgainKeepsTheSecretsAndMigratesOnlyWhatIsNew(t *testin
 	queries := len(db.SQL)
 	f.Publish("0.4.0")
 	cf.SetupOpen = false
-	r := cli.Run([]string{"install", "cloudflare", "--yes"}, Options{Env: env})
+	r := cli.Run([]string{"server", "install", "cloudflare", "--yes"}, Options{Env: env})
 	Code(t, r, 0)
 	second := cf.Scripts["checkend"].Secrets
 	Equal(t, second["ADMIN_TOKEN"], first["ADMIN_TOKEN"])
@@ -138,14 +138,14 @@ func TestInstallCloudflareAgainKeepsTheSecretsAndMigratesOnlyWhatIsNew(t *testin
 func TestInstallCloudflareRefusesAWorkerOrADatabaseThatIsNotCheckend(t *testing.T) {
 	_, cf, cli, env := cloudflare(t)
 	cf.Scripts["checkend"] = &FakeScript{Metadata: J{"bindings": []any{J{"type": "kv_namespace", "name": "CACHE"}}}, Secrets: map[string]string{}}
-	r := cli.Run([]string{"install", "cloudflare", "--yes"}, Options{Env: env})
+	r := cli.Run([]string{"server", "install", "cloudflare", "--yes"}, Options{Env: env})
 	Code(t, r, 1)
 	Contains(t, r.Stderr, "--name")
 	Equal(t, cf.Scripts["checkend"].Metadata["bindings"].([]any)[0].(map[string]any)["name"], "CACHE")
 
 	_, cf, cli, env = cloudflare(t)
 	cf.Databases["db-other"] = &FakeD1{ID: "db-other", Name: "checkend", Tables: []string{"orders"}}
-	r = cli.Run([]string{"install", "cloudflare", "--yes"}, Options{Env: env})
+	r = cli.Run([]string{"server", "install", "cloudflare", "--yes"}, Options{Env: env})
 	Code(t, r, 1)
 	Contains(t, r.Stderr, "not a Checkend database")
 	Equal(t, len(cf.Databases["db-other"].SQL) <= 2, true)
@@ -153,7 +153,7 @@ func TestInstallCloudflareRefusesAWorkerOrADatabaseThatIsNotCheckend(t *testing.
 
 	_, cf, cli, env = cloudflare(t)
 	cf.Databases["db-new"] = &FakeD1{ID: "db-new", Name: "checkend", Tables: []string{"d1_migrations"}, Migrations: []string{"0001_init.sql", "0002_projects.sql", "0003_future.sql"}}
-	r = cli.Run([]string{"install", "cloudflare", "--yes"}, Options{Env: env})
+	r = cli.Run([]string{"server", "install", "cloudflare", "--yes"}, Options{Env: env})
 	Code(t, r, 1)
 	Contains(t, r.Stderr, "0003_future.sql")
 	Equal(t, len(cf.Scripts), 0)
@@ -162,7 +162,7 @@ func TestInstallCloudflareRefusesAWorkerOrADatabaseThatIsNotCheckend(t *testing.
 func TestInstallCloudflareStopsWithoutABookmark(t *testing.T) {
 	_, cf, cli, env := cloudflare(t)
 	cf.Fail = func(call string) bool { return strings.HasSuffix(call, "/time_travel/bookmark") }
-	r := cli.Run([]string{"install", "cloudflare", "--yes"}, Options{Env: env})
+	r := cli.Run([]string{"server", "install", "cloudflare", "--yes"}, Options{Env: env})
 	Code(t, r, 1)
 	Contains(t, r.Stderr, "bookmark")
 	Equal(t, len(cf.DB("checkend").Migrations), 0)
@@ -172,34 +172,34 @@ func TestInstallCloudflareStopsWithoutABookmark(t *testing.T) {
 func TestInstallCloudflareChecksItsInputAndTheAccount(t *testing.T) {
 	_, cf, cli, env := cloudflare(t)
 	for _, argv := range [][]string{
-		{"install", "cloudflare", "--yes", "--name", "Bad_Name"},
-		{"install", "cloudflare", "--yes", "--account", "x;y"},
-		{"install", "cloudflare", "--yes", "--bogus"},
+		{"server", "install", "cloudflare", "--yes", "--name", "Bad_Name"},
+		{"server", "install", "cloudflare", "--yes", "--account", "x;y"},
+		{"server", "install", "cloudflare", "--yes", "--bogus"},
 	} {
 		Code(t, cli.Run(argv, Options{Env: env}), 2)
 	}
 	Equal(t, len(cf.Calls), 0)
-	r := cli.Run([]string{"install", "cloudflare", "--yes"}, Options{Env: map[string]string{"CLOUDFLARE_API_TOKEN": "cf-test-wrong-token-0123456789"}})
+	r := cli.Run([]string{"server", "install", "cloudflare", "--yes"}, Options{Env: map[string]string{"CLOUDFLARE_API_TOKEN": "cf-test-wrong-token-0123456789"}})
 	Code(t, r, 5)
 	Contains(t, r.Stderr, "token")
 	cf.Accounts = append(cf.Accounts, J{"id": "acc2", "name": "Second"})
-	r = cli.Run([]string{"install", "cloudflare", "--yes"}, Options{Env: env})
+	r = cli.Run([]string{"server", "install", "cloudflare", "--yes"}, Options{Env: env})
 	Code(t, r, 2)
 	Contains(t, r.Stderr, "--account")
 	Contains(t, r.Stderr, "Second")
 	cf.Subdomain = ""
-	r = cli.Run([]string{"install", "cloudflare", "--yes", "--account", cf.Account()}, Options{Env: env})
+	r = cli.Run([]string{"server", "install", "cloudflare", "--yes", "--account", cf.Account()}, Options{Env: env})
 	Code(t, r, 1)
 	Contains(t, r.Stderr, "workers.dev")
 }
 
 func TestInstallCloudflareWithR2ForBlobs(t *testing.T) {
 	_, cf, cli, env := cloudflare(t)
-	r := cli.Run([]string{"install", "cloudflare", "--yes", "--r2"}, Options{Env: env})
+	r := cli.Run([]string{"server", "install", "cloudflare", "--yes", "--r2"}, Options{Env: env})
 	Code(t, r, 0)
 	Equal(t, cf.Buckets["checkend-blobs"], true)
 	Contains(t, strings.Join(toJSONStrings(cf.Scripts["checkend"].Metadata["bindings"]), "\n"), `"bucket_name":"checkend-blobs"`)
-	r = cli.Run([]string{"install", "cloudflare", "--yes"}, Options{Env: env})
+	r = cli.Run([]string{"server", "install", "cloudflare", "--yes"}, Options{Env: env})
 	Code(t, r, 0)
 	Contains(t, r.Stderr, "BLOBS")
 }
@@ -220,7 +220,7 @@ func TestInstallCloudflareRefusesAMigrationNameThatIsNotSafeInSQL(t *testing.T) 
 		mig["sha256"], mig["size"] = Sum(bad), len(bad)
 	})
 	pub.Assets["checkend-migrations-0.4.0.tar.gz"] = bad
-	r := cli.Run([]string{"install", "cloudflare", "--yes"}, Options{Env: env})
+	r := cli.Run([]string{"server", "install", "cloudflare", "--yes"}, Options{Env: env})
 	Code(t, r, 1)
 	Contains(t, r.Stderr, "invalid file name")
 	Equal(t, len(cf.Databases), 0)

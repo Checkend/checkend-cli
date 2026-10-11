@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Checkend/checkend-cli/internal/docs"
 	. "github.com/Checkend/checkend-cli/internal/testkit"
 )
 
@@ -140,7 +141,7 @@ func TestIssueListExits3ForAnUnknownProject(t *testing.T) {
 	api, cli, env, _, _ := listSetup(t)
 	r := cli.Run([]string{"issue", "list", "--project", "nope"}, Options{Env: env})
 	Code(t, r, 3)
-	Equal(t, r.ErrJSON(t), J{"error": `Project "nope" not found.`, "hint": "Run `ce project list` to see the projects."})
+	Equal(t, r.ErrJSON(t), J{"error": `Project "nope" not found.`, "hint": "Run `ce project list` to see the projects.", "docs": docs.URL(docs.Issues)})
 	Equal(t, api.Paths(), []string{"GET /v1/issues"})
 }
 
@@ -350,7 +351,7 @@ func TestNextExits3ForAnUnknownProject(t *testing.T) {
 	cli.Write(".checkend.json", `{"project":"gone"}`)
 	r := cli.Run([]string{"next"}, Options{Env: env})
 	Code(t, r, 3)
-	Equal(t, r.ErrJSON(t), J{"error": `Project "gone" not found.`, "hint": "Run `ce project list` to see the projects."})
+	Equal(t, r.ErrJSON(t), J{"error": `Project "gone" not found.`, "hint": "Run `ce project list` to see the projects.", "docs": docs.URL(docs.Issues)})
 }
 
 func TestNextSaysWhenThereIsNothingToDo(t *testing.T) {

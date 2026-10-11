@@ -15,13 +15,14 @@ import (
 
 	"github.com/Checkend/checkend-cli/internal/clierr"
 	"github.com/Checkend/checkend-cli/internal/config"
+	"github.com/Checkend/checkend-cli/internal/docs"
 	"github.com/Checkend/checkend-cli/internal/sshhost"
 )
 
 // dockerKeyFingerprint is the fingerprint of the signing key of Docker's apt repository.
 const dockerKeyFingerprint = "9DC858229FC7DD38854AE2D88D81803C0EBFCD88"
 
-// supportedOS are the Ubuntu and Debian LTS versions that `ce install ssh` supports.
+// supportedOS are the Ubuntu and Debian LTS versions that `ce server install ssh` supports.
 var supportedOS = map[string][]string{"ubuntu": {"22.04", "24.04", "26.04"}, "debian": {"12", "13"}}
 
 var (
@@ -166,8 +167,8 @@ func (r *sshServer) probe(dir string) (probe, error) {
 		}
 	}
 	if !slices.Contains(supportedOS[p.OS], p.Version) {
-		return p, clierr.New(clierr.Failure, fmt.Sprintf("%s runs %s. ce install ssh supports Ubuntu or Debian LTS: Ubuntu 22.04, 24.04 and 26.04, Debian 12 and 13.", r.target, p.label()),
-			"Use a server with one of these versions, or install with Docker yourself (`ce install docker` writes the files).")
+		return p, clierr.New(clierr.Failure, fmt.Sprintf("%s runs %s. ce server install ssh supports Ubuntu or Debian LTS: Ubuntu 22.04, 24.04 and 26.04, Debian 12 and 13.", r.target, p.label()),
+			"Use a server with one of these versions, or install with Docker yourself (`ce server install docker` writes the files).")
 	}
 	if p.Sudo == "no" {
 		return p, clierr.New(clierr.Failure, fmt.Sprintf("%s is not root and has no sudo without a password.", r.target.User), "Connect as root, or allow `sudo -n` for this user.")
@@ -261,7 +262,8 @@ func checkDomain(s *Session, domain, host string) error {
 
 func installSSHCommand() *Command {
 	return &Command{
-		Path:    []string{"install", "ssh"},
+		Path:    []string{"server", "install", "ssh"},
+		Docs:    docs.SelfHostServer,
 		Summary: "Install Checkend on your server over SSH (Ubuntu or Debian LTS; Docker; HTTPS)",
 		Usage:   "<user@host> --domain <domain> [--tunnel] [--host-key <SHA256:…>] [--port <ssh port>] [--dir <dir>] [--version <v>] [--yes]",
 		Args:    []string{"user@host"},
@@ -285,7 +287,7 @@ func installSSHCommand() *Command {
 		Run: func(s *Session) error {
 			target, err := sshhost.ParseTarget(s.Args[0])
 			if err != nil {
-				return clierr.UsageError(fmt.Sprintf("%q is not a valid SSH target: %v.", s.Args[0], err), "Example: ce install ssh root@203.0.113.7 --domain errors.example.com")
+				return clierr.UsageError(fmt.Sprintf("%q is not a valid SSH target: %v.", s.Args[0], err), "Example: ce server install ssh root@203.0.113.7 --domain errors.example.com")
 			}
 			domain := strings.ToLower(s.String("domain"))
 			if !domainPattern.MatchString(domain) {
@@ -318,7 +320,7 @@ func installSSHCommand() *Command {
 			if tunnelToken != "" && !tunnelPattern.MatchString(tunnelToken) {
 				return clierr.UsageError("CHECKEND_TUNNEL_TOKEN is not a tunnel token.", "Copy the token of the tunnel again from the Cloudflare dashboard.")
 			}
-			if err := needApproval(s, "ce install ssh"); err != nil {
+			if err := needApproval(s, "ce server install ssh"); err != nil {
 				return err
 			}
 			if !tunnel {
@@ -337,7 +339,7 @@ func installSSHCommand() *Command {
 			proxyImage := rel.Manifest.Proxies[proxyName]
 			if proxyImage == "" {
 				return clierr.New(clierr.Failure, fmt.Sprintf("Checkend %s has no pinned %s image in its release manifest.", rel.Manifest.Version, proxyName),
-					"Use a newer release (--version), or install with `ce install docker` and your own proxy.")
+					"Use a newer release (--version), or install with `ce server install docker` and your own proxy.")
 			}
 			srv := &sshServer{s: s, target: target, port: fmt.Sprint(port), known: filepath.Join(config.Dir(s.Host), "known_hosts")}
 			fingerprint, err := srv.verifyHostKey(pinned)

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Checkend/checkend-cli/internal/docs"
 	. "github.com/Checkend/checkend-cli/internal/testkit"
 )
 
@@ -104,7 +105,7 @@ func TestATypoNeverDoesAnything(t *testing.T) {
 func TestUsageErrorAsJSONWhenStdoutIsNotATerminal(t *testing.T) {
 	_, cli, _ := setup(t)
 	r := cli.Run([]string{"cd"})
-	Equal(t, r.ErrJSON(t), map[string]any{"error": `Unknown command "cd".`, "hint": "Run `ce --help` to see the commands."})
+	Equal(t, r.ErrJSON(t), map[string]any{"error": `Unknown command "cd".`, "hint": "Run `ce --help` to see the commands.", "docs": docs.URL(docs.QuickStart)})
 	if r.Stdout != "" {
 		t.Errorf("stdout: %q", r.Stdout)
 	}

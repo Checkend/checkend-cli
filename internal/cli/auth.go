@@ -7,6 +7,7 @@ import (
 	"github.com/Checkend/checkend-cli/internal/api"
 	"github.com/Checkend/checkend-cli/internal/clierr"
 	"github.com/Checkend/checkend-cli/internal/config"
+	"github.com/Checkend/checkend-cli/internal/docs"
 	"github.com/Checkend/checkend-cli/internal/jv"
 	"github.com/Checkend/checkend-cli/internal/output"
 	"github.com/Checkend/checkend-cli/internal/urlcheck"
@@ -154,16 +155,12 @@ func statusCommand() *Command {
 	return &Command{
 		Path:    []string{"status"},
 		Summary: "Show the instance, its health and the linked project",
-		Usage:   "[--project <id|slug>] [--server]",
-		Details: []string{
-			"  --project <id|slug>  The project (default: the project in .checkend.json)",
-			"  --server             The server that `ce install` installed: its version, health and",
-			"                       whether a newer release exists",
-		},
+		Usage:   "[--project <id|slug>]",
 		Options: map[string]Kind{"project": String, "server": Bool},
 		Run: func(s *Session) error {
 			if s.Bool("server") {
-				return serverStatus(s)
+				s.Out.Notice("`ce status --server` is now `ce server status`. The old name goes away in the next release.")
+				return withDocs(serverStatus(s), docs.CheckInstall)
 			}
 			url, err := s.URL()
 			if err != nil {

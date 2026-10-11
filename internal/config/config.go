@@ -12,6 +12,7 @@ import (
 
 	"github.com/Checkend/checkend-cli/internal/clierr"
 	"github.com/Checkend/checkend-cli/internal/credstore"
+	"github.com/Checkend/checkend-cli/internal/docs"
 	"github.com/Checkend/checkend-cli/internal/host"
 	"github.com/Checkend/checkend-cli/internal/urlcheck"
 )
@@ -200,7 +201,8 @@ func keychainToken(h *host.Host, account, url string) (string, error) {
 		return "", nil
 	}
 	if err != nil {
-		return "", clierr.New(clierr.Auth, fmt.Sprintf("Cannot read the token from the keychain: %v", err), fmt.Sprintf("Run `ce login --url %s`.", url))
+		return "", clierr.New(clierr.Auth, fmt.Sprintf("Cannot read the token from the OS keychain: %v", err),
+			fmt.Sprintf("Unlock the keychain, or set CHECKEND_NO_KEYCHAIN=1 and run `ce login --url %s` to keep the token in the config file (mode 600).", url)).WithDocs(docs.ConnectAgent)
 	}
 	return token, nil
 }

@@ -57,7 +57,7 @@ func sshServer(t *testing.T) (*FakeReleases, *Harness, *fakeServer) {
 	return f, cli, srv
 }
 
-var sshArgs = []string{"install", "ssh", "root@203.0.113.7", "--domain", "errors.example.com"}
+var sshArgs = []string{"server", "install", "ssh", "root@203.0.113.7", "--domain", "errors.example.com"}
 
 func sshCalls(cli *Harness) []Call {
 	var out []Call
@@ -72,14 +72,14 @@ func sshCalls(cli *Harness) []Call {
 func TestInstallSSHChecksItsInputBeforeAnyCall(t *testing.T) {
 	_, cli, _ := sshServer(t)
 	for _, argv := range [][]string{
-		{"install", "ssh", "--yes", "--domain", "errors.example.com"},
-		{"install", "ssh", "-oProxyCommand=x", "--yes", "--domain", "errors.example.com"},
-		{"install", "ssh", "root@host;rm", "--yes", "--domain", "errors.example.com"},
-		{"install", "ssh", "root@203.0.113.7", "--yes"},
-		{"install", "ssh", "root@203.0.113.7", "--yes", "--domain", "https://errors.example.com"},
-		{"install", "ssh", "root@203.0.113.7", "--yes", "--domain", "errors.example.com", "--dir", "/opt/../etc"},
-		{"install", "ssh", "root@203.0.113.7", "--yes", "--domain", "errors.example.com", "--host-key", "MD5:aa"},
-		{"install", "ssh", "root@203.0.113.7", "--domain", "errors.example.com"},
+		{"server", "install", "ssh", "--yes", "--domain", "errors.example.com"},
+		{"server", "install", "ssh", "-oProxyCommand=x", "--yes", "--domain", "errors.example.com"},
+		{"server", "install", "ssh", "root@host;rm", "--yes", "--domain", "errors.example.com"},
+		{"server", "install", "ssh", "root@203.0.113.7", "--yes"},
+		{"server", "install", "ssh", "root@203.0.113.7", "--yes", "--domain", "https://errors.example.com"},
+		{"server", "install", "ssh", "root@203.0.113.7", "--yes", "--domain", "errors.example.com", "--dir", "/opt/../etc"},
+		{"server", "install", "ssh", "root@203.0.113.7", "--yes", "--domain", "errors.example.com", "--host-key", "MD5:aa"},
+		{"server", "install", "ssh", "root@203.0.113.7", "--domain", "errors.example.com"},
 	} {
 		Code(t, cli.Run(argv), 2)
 	}

@@ -1,7 +1,11 @@
 // Package clierr has the exit codes and the error type of the CLI.
 package clierr
 
-import "errors"
+import (
+	"errors"
+
+	"github.com/Checkend/checkend-cli/internal/docs"
+)
 
 // Exit codes. Scripts and agents depend on them: do not change a value.
 const (
@@ -15,11 +19,19 @@ const (
 	Pending = 6
 )
 
-// Error is an error with an exit code and an optional next step for the user.
+// Error is an error with an exit code, the next step for the user, and the docs section that
+// explains it (without one, the CLI uses the docs topic of the command).
 type Error struct {
 	Msg  string
 	Code int
 	Hint string
+	Docs docs.Topic
+}
+
+// WithDocs sets the docs section of the error.
+func (e *Error) WithDocs(t docs.Topic) *Error {
+	e.Docs = t
+	return e
 }
 
 func (e *Error) Error() string { return e.Msg }

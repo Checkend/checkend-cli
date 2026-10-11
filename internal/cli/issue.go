@@ -128,7 +128,7 @@ func issueViewCommand() *Command {
 				return err
 			}
 			raw, err := client.Get(fmt.Sprintf("/v1/issues/%d", id), nil)
-			if raw, err = api.OrNotFound(raw, err, fmt.Sprintf("Issue %d not found.", id), ""); err != nil {
+			if raw, err = api.OrNotFound(raw, err, fmt.Sprintf("Issue %d not found.", id), "Run `ce issue list` to see the issues."); err != nil {
 				return err
 			}
 			if prefix := m[1]; prefix != "" {

@@ -33,6 +33,9 @@ internal/
   sanitize/         Removes terminal escapes from untrusted text; safe JSON.
   snippets/         Stack detection, SDK snippets, the Sentry scan of a repo.
   sourcemap/        The source map index (format v1), the same bytes as the server builds.
+  docs/             The one table of docs links that the errors print.
+  serverrelease/    Finds, verifies and downloads a signed server release (ce server install).
+  sshhost/          SSH targets, host key fingerprints and known_hosts (ce server install ssh).
   release/          Tests of install.sh and the Homebrew formula script.
   host/             Everything from the outside world (env, files, terminal, clock). Tests fake it.
   testkit/          The fake API (fakeapi.go) and the in-process harness (harness.go).
@@ -51,8 +54,10 @@ install.sh          The install script (macOS and Linux).
 3. **Command pattern `ce <thing> <action>`**, plus top-level shortcuts for the fix loop
    (`next`). Names match the API and the MCP tools.
 4. **Output modes.** Terminal: short tables and cards. Not a terminal or `--json`: the API JSON,
-   unchanged in shape and key order. Errors on stderr; in JSON mode `{"error", "hint"}`. Each error
-   gives the next step.
+   unchanged in shape and key order. Errors on stderr; in JSON mode `{"error", "hint", "docs"}`.
+   Each error says what happened, gives the next step, and links to the docs: give it a topic of
+   `internal/docs` with `WithDocs()`, or it gets the topic of its command. Add new topics only to
+   the table in `internal/docs/docs.go`, and run `CE_DOCS_LIVE=1 go test ./internal/docs/`.
 5. **Exit codes are a contract:** 0 OK, 1 error, 2 usage, 3 not found, 4 conflict,
    5 authentication, 6 accepted and waiting for approval. Do not change them; add new ones only.
 6. **A typo never does anything.** Unknown commands, options or extra arguments exit 2 before

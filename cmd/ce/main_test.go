@@ -79,7 +79,7 @@ func TestTheBinaryExits2ForAnUnknownCommand(t *testing.T) {
 
 func TestTheBinaryExits5WhenNobodyIsLoggedIn(t *testing.T) {
 	r := ce(t, "", "issue", "list")
-	if r.code != 5 || errorOf(t, r.stderr)["hint"] != "Run `ce login`." {
+	if r.code != 5 || errorOf(t, r.stderr)["hint"] != "Run `ce login --url <url>` with an API token." || errorOf(t, r.stderr)["docs"] != "https://checkend.com/docs/api#authentication" {
 		t.Errorf("%d %q", r.code, r.stderr)
 	}
 }

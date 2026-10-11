@@ -40,7 +40,7 @@ func eventViewCommand() *Command {
 				return err
 			}
 			raw, err := client.Get(fmt.Sprintf("/v1/events/%d", id), nil)
-			if raw, err = api.OrNotFound(raw, err, fmt.Sprintf("Event %d not found.", id), ""); err != nil {
+			if raw, err = api.OrNotFound(raw, err, fmt.Sprintf("Event %d not found.", id), "Run `ce issue view <id>` to see the events of an issue."); err != nil {
 				return err
 			}
 			s.Out.Data(raw, func(d any) string {

@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/Checkend/checkend-cli/internal/clierr"
+	"github.com/Checkend/checkend-cli/internal/docs"
 	"github.com/Checkend/checkend-cli/internal/host"
 	"github.com/Checkend/checkend-cli/internal/jv"
 	"github.com/Checkend/checkend-cli/internal/sanitize"
@@ -109,11 +110,17 @@ func (o *Output) Error(e *clierr.Error) {
 		if hint != "" {
 			body["hint"] = hint
 		}
+		if e.Docs != "" {
+			body["docs"] = docs.URL(e.Docs)
+		}
 		text = string(sanitize.JSON(body)) + "\n"
 	} else {
 		text = o.Red("Error:") + " " + msg + "\n"
 		if hint != "" {
 			text += hint + "\n"
+		}
+		if e.Docs != "" {
+			text += "Docs: " + docs.URL(e.Docs) + "\n"
 		}
 	}
 	o.writeTo(o.host.Stderr, text)

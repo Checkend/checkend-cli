@@ -12,15 +12,16 @@ import (
 	"github.com/Checkend/checkend-cli/internal/api"
 	"github.com/Checkend/checkend-cli/internal/clierr"
 	"github.com/Checkend/checkend-cli/internal/config"
+	"github.com/Checkend/checkend-cli/internal/docs"
 	"github.com/Checkend/checkend-cli/internal/serverrelease"
 	"github.com/Checkend/checkend-cli/internal/sshhost"
 )
 
-// The server commands work on a server that `ce install` installed from this machine: the
+// The server commands work on a server that `ce server install` installed from this machine: the
 // install record (installs.json) names its kind and where it is.
 
 func serverCommands() []*Command {
-	return []*Command{upgradeCommand(), backupCommand(), uninstallCommand()}
+	return []*Command{upgradeCommand(), backupCommand(), serverStatusCommand(), uninstallCommand()}
 }
 
 // installed is the URL and the install record of the instance (--url, CHECKEND_URL, or the
@@ -28,16 +29,22 @@ func serverCommands() []*Command {
 func installed(s *Session) (string, *config.Install, error) {
 	u, err := s.URL()
 	if err != nil {
-		return "", nil, clierr.New(clierr.Failure, "Which server? Give --url.", "Run `ce install` first to install one.")
+		return "", nil, clierr.New(clierr.Failure, "Which server? Give --url.", "Run `ce server install` first to install one.")
 	}
 	installs, err := config.ReadInstalls(s.Host)
 	if err != nil {
 		return "", nil, err
 	}
 	rec, ok := installs[u]
+	// A self-hosted server never has a base path; a hosted space always has one.
+	if parsed, err := url.Parse(u); !ok && err == nil && parsed.Path != "" {
+		return u, nil, clierr.New(clierr.Failure,
+			"This space is hosted by Checkend and updates itself. `ce server` is only for servers that you run yourself.",
+			"To run a server yourself, see the self-host guide.").WithDocs(docs.SelfHost)
+	}
 	if !ok {
-		return u, nil, clierr.New(clierr.Failure, fmt.Sprintf("%s was not installed with `ce install` on this machine.", u),
-			"Run `ce install docker|ssh|cloudflare` first, or give the --url of a server that it installed.")
+		return u, nil, clierr.New(clierr.Failure, fmt.Sprintf("%s was not installed with `ce server install` on this machine.", u),
+			"Run `ce server install docker|ssh|cloudflare` first, or give the --url of a server that it installed.")
 	}
 	return u, &rec, nil
 }
@@ -66,8 +73,9 @@ func backupName(s *Session) string {
 
 func upgradeCommand() *Command {
 	return &Command{
-		Path:    []string{"upgrade"},
-		Summary: "Upgrade a server that ce install installed to a newer signed release",
+		Path:    []string{"server", "upgrade"},
+		Docs:    docs.Upgrade,
+		Summary: "Upgrade a server that ce server install installed to a newer signed release",
 		Usage:   "[--url <url>] [--version <v>] [--allow-downgrade] [--yes]",
 		Details: []string{
 			"  --url <url>          The server (default: the current instance)",
@@ -81,7 +89,7 @@ func upgradeCommand() *Command {
 		},
 		Options: map[string]Kind{"version": String, "allow-downgrade": Bool, "yes": Bool},
 		Run: func(s *Session) error {
-			if err := needApproval(s, "ce upgrade"); err != nil {
+			if err := needApproval(s, "ce server upgrade"); err != nil {
 				return err
 			}
 			u, rec, err := installed(s)
@@ -92,14 +100,14 @@ func upgradeCommand() *Command {
 			var path, argv []string
 			switch rec.Kind {
 			case "docker":
-				path, argv = []string{"install", "docker"}, []string{"--dir", rec.Dir, "--port", parsed.Port()}
+				path, argv = []string{"server", "install", "docker"}, []string{"--dir", rec.Dir, "--port", parsed.Port()}
 			case "ssh":
-				path, argv = []string{"install", "ssh"}, []string{rec.Target, "--domain", parsed.Hostname(), "--port", rec.Port, "--dir", rec.Dir, "--host-key", rec.HostKey}
+				path, argv = []string{"server", "install", "ssh"}, []string{rec.Target, "--domain", parsed.Hostname(), "--port", rec.Port, "--dir", rec.Dir, "--host-key", rec.HostKey}
 				if rec.Proxy == "tunnel" {
 					argv = append(argv, "--tunnel")
 				}
 			case "cloudflare":
-				path, argv = []string{"install", "cloudflare"}, []string{"--account", rec.Account, "--name", rec.Worker, "--database", rec.Database}
+				path, argv = []string{"server", "install", "cloudflare"}, []string{"--account", rec.Account, "--name", rec.Worker, "--database", rec.Database}
 			default:
 				return clierr.Fail(fmt.Sprintf("The install record of %s has an unknown kind %q.", u, rec.Kind))
 			}
@@ -146,8 +154,9 @@ func runAs(s *Session, path, argv []string, rec *config.Install) error {
 
 func backupCommand() *Command {
 	return &Command{
-		Path:    []string{"backup"},
-		Summary: "Back up the database of a server that ce install installed",
+		Path:    []string{"server", "backup"},
+		Docs:    docs.Backup,
+		Summary: "Back up the database of a server that ce server install installed",
 		Usage:   "[--url <url>] [--output <file>]",
 		Details: []string{
 			"  --url <url>        The server (default: the current instance)",
@@ -244,7 +253,18 @@ func backupCommand() *Command {
 	}
 }
 
-// serverStatus is `ce status --server`.
+func serverStatusCommand() *Command {
+	return &Command{
+		Path:    []string{"server", "status"},
+		Summary: "Show a server that ce server install installed: its version, health and upgrades",
+		Usage:   "[--url <url>]",
+		Details: []string{"  --url <url>    The server (default: the current instance)"},
+		Docs:    docs.CheckInstall,
+		Run:     serverStatus,
+	}
+}
+
+// serverStatus is `ce server status`.
 func serverStatus(s *Session) error {
 	u, rec, err := installed(s)
 	if err != nil {
@@ -273,7 +293,7 @@ func serverStatus(s *Session) error {
 			lines = append(lines, fmt.Sprintf("Health: not reachable (%v).", m["health_error"]))
 		}
 		if m["upgrade_available"] == true {
-			lines = append(lines, fmt.Sprintf("Checkend %v is available: run `ce upgrade`.", m["latest"]))
+			lines = append(lines, fmt.Sprintf("Checkend %v is available: run `ce server upgrade`.", m["latest"]))
 		} else if l, ok := m["latest"]; ok {
 			lines = append(lines, fmt.Sprintf("The latest release is %v.", l))
 		}
@@ -284,8 +304,9 @@ func serverStatus(s *Session) error {
 
 func uninstallCommand() *Command {
 	return &Command{
-		Path:    []string{"uninstall"},
-		Summary: "Remove a server that ce install installed (the data stays unless --delete-data)",
+		Path:    []string{"server", "uninstall"},
+		Docs:    docs.Operations,
+		Summary: "Remove a server that ce server install installed (the data stays unless --delete-data)",
 		Usage:   "[--url <url>] [--delete-data] [--yes]",
 		Details: []string{
 			"  --url <url>       The server (default: the current instance)",
@@ -295,7 +316,7 @@ func uninstallCommand() *Command {
 		},
 		Options: map[string]Kind{"delete-data": Bool, "yes": Bool},
 		Run: func(s *Session) error {
-			if err := needYes(s, "ce uninstall"); err != nil {
+			if err := needYes(s, "ce server uninstall"); err != nil {
 				return err
 			}
 			u, rec, err := installed(s)

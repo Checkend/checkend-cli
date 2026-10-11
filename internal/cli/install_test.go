@@ -47,7 +47,7 @@ func noSecrets(t *testing.T, r Result, env map[string]string) {
 
 func TestInstallSaysWhenNoServerReleaseIsPublished(t *testing.T) {
 	_, cli := installer(t)
-	r := cli.Run([]string{"install", "docker", "--yes"})
+	r := cli.Run([]string{"server", "install", "docker", "--yes"})
 	Code(t, r, 1)
 	Contains(t, r.Stderr, "No Checkend server release is published yet")
 	if Exists(filepath.Join(cli.Repo, "checkend")) {
@@ -58,11 +58,11 @@ func TestInstallSaysWhenNoServerReleaseIsPublished(t *testing.T) {
 func TestInstallNeedsYesWithoutATerminal(t *testing.T) {
 	f, cli := installer(t)
 	f.Publish("0.3.0")
-	r := cli.Run([]string{"install", "docker"})
+	r := cli.Run([]string{"server", "install", "docker"})
 	Code(t, r, 2)
 	Contains(t, r.Stderr, "--yes")
 	Equal(t, len(f.Downloads), 0)
-	for _, argv := range [][]string{{"install"}, {"install", "podman"}, {"install", "docker", "--bogus"}, {"install", "docker", "--port", "x", "--yes"}, {"install", "docker", "--port", "70000", "--yes"}} {
+	for _, argv := range [][]string{{"install"}, {"install", "podman"}, {"server", "install", "docker", "--bogus"}, {"server", "install", "docker", "--port", "x", "--yes"}, {"server", "install", "docker", "--port", "70000", "--yes"}} {
 		Code(t, cli.Run(argv), 2)
 	}
 	Equal(t, len(f.Downloads), 0)
@@ -71,7 +71,7 @@ func TestInstallNeedsYesWithoutATerminal(t *testing.T) {
 func TestInstallDockerWritesAComposeFileAndASecretEnvFile(t *testing.T) {
 	f, cli := installer(t)
 	rel := f.Publish("0.3.0")
-	r := cli.Run([]string{"install", "docker", "--yes"})
+	r := cli.Run([]string{"server", "install", "docker", "--yes"})
 	Code(t, r, 0)
 	dir := filepath.Join(cli.Repo, "checkend")
 	compose, err := os.ReadFile(filepath.Join(dir, "compose.yaml"))
@@ -119,10 +119,10 @@ func TestInstallDockerAgainKeepsTheSecretsAndAValidSetupCode(t *testing.T) {
 	f, cli := installer(t)
 	f.Publish("0.3.0")
 	dir := filepath.Join(cli.Repo, "checkend")
-	Code(t, cli.Run([]string{"install", "docker", "--yes"}), 0)
+	Code(t, cli.Run([]string{"server", "install", "docker", "--yes"}), 0)
 	first := readEnv(t, filepath.Join(dir, ".env"))
 	f.Publish("0.4.0")
-	r := cli.Run([]string{"install", "docker", "--yes", "--plain"})
+	r := cli.Run([]string{"server", "install", "docker", "--yes", "--plain"})
 	Code(t, r, 0)
 	second := readEnv(t, filepath.Join(dir, ".env"))
 	Equal(t, second["ADMIN_TOKEN"], first["ADMIN_TOKEN"])
@@ -147,7 +147,7 @@ func TestInstallDockerAgainKeepsTheSecretsAndAValidSetupCode(t *testing.T) {
 func TestInstallDockerShowsThePlanAndAsksFirst(t *testing.T) {
 	f, cli := installer(t)
 	f.Publish("0.3.0")
-	r := cli.Run([]string{"install", "docker", "--dir", "srv", "--port", "9000"}, Options{TTY: true, Answers: []string{"n"}})
+	r := cli.Run([]string{"server", "install", "docker", "--dir", "srv", "--port", "9000"}, Options{TTY: true, Answers: []string{"n"}})
 	Code(t, r, 2)
 	Contains(t, r.Stderr, "Checkend 0.3.0")
 	Contains(t, r.Stderr, filepath.Join(cli.Repo, "srv", "compose.yaml"))
@@ -155,7 +155,7 @@ func TestInstallDockerShowsThePlanAndAsksFirst(t *testing.T) {
 	if Exists(filepath.Join(cli.Repo, "srv")) {
 		t.Error("it wrote files after a no")
 	}
-	r = cli.Run([]string{"install", "docker", "--dir", "srv", "--port", "9000", "--version", "0.3.0"}, Options{TTY: true, Answers: []string{"y"}})
+	r = cli.Run([]string{"server", "install", "docker", "--dir", "srv", "--port", "9000", "--version", "0.3.0"}, Options{TTY: true, Answers: []string{"y"}})
 	Code(t, r, 0)
 	Matches(t, r.Stdout, regexp.QuoteMeta("http://localhost:9000/setup#"))
 	NotContains(t, r.All, readEnv(t, filepath.Join(cli.Repo, "srv", ".env"))["ADMIN_TOKEN"])
@@ -167,7 +167,7 @@ func TestInstallDockerAgainReplacesASetupCodeThatExpiresSoon(t *testing.T) {
 	dir := filepath.Join(cli.Repo, "checkend")
 	// 20 hours before the clock of the harness: the link would expire in 4 hours.
 	cli.Write("checkend/.env", "ADMIN_TOKEN=test-admin-token-0123456789abcdef0123456789\nENCRYPTION_KEYS=k1:dGVzdA==\nSETUP_CODE=1791561600.test-old-code\n")
-	Code(t, cli.Run([]string{"install", "docker", "--yes"}), 0)
+	Code(t, cli.Run([]string{"server", "install", "docker", "--yes"}), 0)
 	env := readEnv(t, filepath.Join(dir, ".env"))
 	Matches(t, env["SETUP_CODE"], `^1791633600\.`)
 	Equal(t, env["ADMIN_TOKEN"], "test-admin-token-0123456789abcdef0123456789")

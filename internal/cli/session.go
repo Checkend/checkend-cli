@@ -10,6 +10,7 @@ import (
 	"github.com/Checkend/checkend-cli/internal/api"
 	"github.com/Checkend/checkend-cli/internal/clierr"
 	"github.com/Checkend/checkend-cli/internal/config"
+	"github.com/Checkend/checkend-cli/internal/docs"
 	"github.com/Checkend/checkend-cli/internal/host"
 	"github.com/Checkend/checkend-cli/internal/jv"
 	"github.com/Checkend/checkend-cli/internal/output"
@@ -29,6 +30,10 @@ type Command struct {
 	// name like "[path...]" takes any number of arguments.
 	Args []string
 	Run  func(s *Session) error
+	// Docs is the docs section of the command: its errors link to it unless they have their own.
+	Docs docs.Topic
+	// Hidden commands are old names that still work for one release; help does not show them.
+	Hidden bool
 }
 
 // Exit ends a command with an exit code and no error message (the command printed its result).
@@ -44,7 +49,7 @@ type Session struct {
 	p    parsed
 	link *config.Link
 	read bool
-	// upgrade is the install record when `ce upgrade` runs an install command.
+	// upgrade is the install record when `ce server upgrade` runs an install command.
 	upgrade        *config.Install
 	allowDowngrade bool
 }
@@ -71,7 +76,7 @@ func (s *Session) URL() (string, error) {
 		return "", err
 	}
 	if url == "" {
-		return "", clierr.New(clierr.Auth, "Not logged in.", "Run `ce login`.")
+		return "", clierr.New(clierr.Auth, "Not logged in: ce does not know your Checkend instance.", "Run `ce login --url <url>` with an API token.").WithDocs(docs.Authentication)
 	}
 	return url, nil
 }
@@ -128,7 +133,7 @@ func (s *Session) API() (*api.Client, error) {
 		if config.HasSavedHosts(s.Host) {
 			msg = fmt.Sprintf("Not logged in to %s.", url)
 		}
-		return nil, clierr.New(clierr.Auth, msg, fmt.Sprintf("Run `ce login --url %s`.", url))
+		return nil, clierr.New(clierr.Auth, msg, fmt.Sprintf("Run `ce login --url %s` with an API token.", url)).WithDocs(docs.Authentication)
 	}
 	return api.New(s.Host, url, token), nil
 }

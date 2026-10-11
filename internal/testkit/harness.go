@@ -82,6 +82,9 @@ type Harness struct {
 	DNS map[string][]string
 	// HTTP is the HTTP client of the CLI (nil: the default).
 	HTTP *http.Client
+	// Executable is the path of ce for `ce update`; CLIReleaseAPI fakes its releases.
+	Executable    string
+	CLIReleaseAPI string
 	// Cloudflare is the fake of the Cloudflare API (nil: none).
 	Cloudflare *FakeCloudflare
 }
@@ -167,6 +170,7 @@ func (h *Harness) Run(argv []string, opts ...Options) Result {
 			return "", fmt.Errorf("fatal: not a git repository")
 		},
 	}
+	hst.Executable, hst.CLIReleaseAPI = h.Executable, h.CLIReleaseAPI
 	if h.Cloudflare != nil {
 		hst.CloudflareAPI = h.Cloudflare.URL
 	}

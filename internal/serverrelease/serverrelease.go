@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/Checkend/checkend-cli/internal/clierr"
+	"github.com/Checkend/checkend-cli/internal/docs"
 	"github.com/Checkend/checkend-cli/internal/version"
 )
 
@@ -200,7 +201,7 @@ func (s Source) Latest() (*Release, error) {
 			return s.verify(r)
 		}
 	}
-	return nil, clierr.New(clierr.Failure, NoRelease, "Watch https://github.com/Checkend/checkend/releases for the first release.")
+	return nil, clierr.New(clierr.Failure, NoRelease, "Watch https://github.com/Checkend/checkend/releases for the first release.").WithDocs(docs.Upgrade)
 }
 
 // Get is the release of a version ("0.3.0" or "v0.3.0").
