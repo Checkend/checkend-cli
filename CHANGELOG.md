@@ -59,6 +59,9 @@ The first release. Nothing is tagged or published yet. Until then, build `ce` fr
   names still work in this release, hidden from the help, with a hint to the new name.
   `ce server install` without a target lists the three targets. On a hosted space (a URL with a
   base path) the server commands say that the space updates itself.
+- `ce update` updates ce itself: it finds the install method (Homebrew, npm, the install script
+  or go install) and runs its update after a confirmation, or prints the commands. Until a ce
+  release exists, it says so and prints the `go install` command.
 - Every error ends with a link to the docs section that explains it; JSON errors have `"docs"`
   next to `"error"` and `"hint"`.
 - Install methods for the first release: Homebrew, `install.sh` and the npm wrapper

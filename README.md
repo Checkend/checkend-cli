@@ -114,6 +114,7 @@ claude mcp add checkend -- ce mcp --url https://checkend.example.com
 | `ce server backup [--output <file>]` | Back up its database (Cloudflare: a D1 Time Travel bookmark) |
 | `ce server status` | Its version, health, and whether a newer release exists |
 | `ce server uninstall [--delete-data]` | Remove it; the data stays unless `--delete-data` |
+| `ce update [--yes]` | Update ce itself (Homebrew, npm, the install script or go install) |
 
 `ce server` is for a Checkend server that you run yourself; a hosted space updates itself. The
 old names (`ce install`, `ce upgrade`, `ce backup`, `ce uninstall`, `ce status --server`) still

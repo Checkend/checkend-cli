@@ -21,6 +21,7 @@ func TestHelpShowsServerAndHidesTheOldNames(t *testing.T) {
 	cli := NewHarness(t)
 	help := commandsSection(cli.Run([]string{"--help"}).Stdout)
 	Contains(t, help, "server <action>")
+	Contains(t, help, "update")
 	for _, old := range []string{"\n  install", "\n  upgrade", "\n  backup", "\n  uninstall"} {
 		NotContains(t, help, old)
 	}

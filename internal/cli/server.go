@@ -40,7 +40,7 @@ func installed(s *Session) (string, *config.Install, error) {
 	if parsed, err := url.Parse(u); !ok && err == nil && parsed.Path != "" {
 		return u, nil, clierr.New(clierr.Failure,
 			"This space is hosted by Checkend and updates itself. `ce server` is only for servers that you run yourself.",
-			"To run a server yourself, see the self-host guide.").WithDocs(docs.SelfHost)
+			"To update the ce tool, run `ce update`.").WithDocs(docs.SelfHost)
 	}
 	if !ok {
 		return u, nil, clierr.New(clierr.Failure, fmt.Sprintf("%s was not installed with `ce server install` on this machine.", u),
