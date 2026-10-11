@@ -34,6 +34,13 @@ type Host struct {
 	Git     func(dir string, args ...string) (string, error)
 	Now     func() time.Time
 	Keyring credstore.Keyring
+	// ReleaseAPI and ReleaseKeys replace the source of the server releases and its trusted
+	// keys (tests only; a release build leaves them empty).
+	ReleaseAPI  string
+	ReleaseKeys map[string][]byte
+	// Run runs a program (ssh, ssh-keyscan, docker) with stdin and returns its stdout. Tests
+	// fake it.
+	Run func(stdin []byte, name string, args ...string) ([]byte, error)
 }
 
 // Getenv returns an environment variable, or "".

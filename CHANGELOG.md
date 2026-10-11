@@ -34,6 +34,10 @@ The first release. Nothing is tagged or published yet. Until then, build `ce` fr
   waiting for approval.
 - Every command works with an instance under a base path (`--url https://host.example/<id>`):
   the requests, the DSNs, `ce setup`, `ce mcp` and `ce sourcemaps upload` keep the path.
+- `ce install docker` writes `compose.yaml` and `.env` for a released, signed server version:
+  the image is pinned by its digest, with a volume, restarts and a nightly backup. It shows the
+  plan and asks first (`--yes` for agents), keeps the secrets when it runs again, saves the admin
+  token in the keychain, and prints the setup link. It never prints a secret.
 - Install methods for the first release: Homebrew, `install.sh` and the npm wrapper
   `@checkend/cli`. Each one checks the SHA-256 of the binary.
 

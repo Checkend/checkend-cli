@@ -25,7 +25,8 @@ var globalOptions = map[string]Kind{
 // commands lists only commands whose server API exists (and so they are in --help).
 func commands() []*Command {
 	return slices.Concat(authCommands(), setupCommands(), []*Command{mcpCommand(), initCommand(), nextCommand(), deployCommand(), migrateCommand()},
-		issueCommands(), eventCommands(), projectCommands(), []*Command{dsnRotateCommand(), sourcemapsUploadCommand()})
+		issueCommands(), eventCommands(), projectCommands(), []*Command{dsnRotateCommand(), sourcemapsUploadCommand()},
+		installCommands())
 }
 
 var groups = map[string]string{
@@ -34,6 +35,7 @@ var groups = map[string]string{
 	"project":    "Create, list and delete projects; print a DSN",
 	"dsn":        "Rotate the DSN of a project",
 	"sourcemaps": "Upload source maps",
+	"install":    "Install a released Checkend server (Docker, a server over SSH, Cloudflare)",
 }
 
 // Run runs `ce argv...` and returns the exit code.

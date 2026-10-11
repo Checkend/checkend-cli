@@ -72,6 +72,18 @@ type Harness struct {
 	Prompts []Prompt
 	// Git has the output of git commands, by their arguments ("rev-parse HEAD").
 	Git map[string]string
+	// Releases is the fake of the server releases (nil: none is configured).
+	Releases *FakeReleases
+	// Exec fakes the programs that the CLI runs (ssh, docker). Calls records each call.
+	Exec  func(stdin []byte, name string, args ...string) ([]byte, error)
+	Calls []Call
+}
+
+// Call is one program that the CLI ran.
+type Call struct {
+	Name  string
+	Args  []string
+	Stdin string
 }
 
 // NewHarness makes a home and a repo (with .git) in a temporary directory.
@@ -147,6 +159,16 @@ func (h *Harness) Run(argv []string, opts ...Options) Result {
 			}
 			return "", fmt.Errorf("fatal: not a git repository")
 		},
+	}
+	if h.Releases != nil {
+		hst.ReleaseAPI, hst.ReleaseKeys = h.Releases.API, h.Releases.PublicKeys()
+	}
+	hst.Run = func(stdin []byte, name string, args ...string) ([]byte, error) {
+		h.Calls = append(h.Calls, Call{Name: name, Args: args, Stdin: string(stdin)})
+		if h.Exec == nil {
+			return nil, fmt.Errorf("%s: not found", name)
+		}
+		return h.Exec(stdin, name, args...)
 	}
 	code := cli.Run(argv, hst)
 	return Result{Code: code, Stdout: stdout.String(), Stderr: stderr.String(), All: all.String()}

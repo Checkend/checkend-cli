@@ -4,6 +4,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"io"
 	"os"
 	"os/exec"
@@ -80,6 +81,14 @@ func git(dir string, args ...string) (string, error) {
 	return strings.TrimSpace(string(out)), err
 }
 
+// run runs a program with stdin; its stderr goes to the terminal (ssh asks there, for example).
+func run(stdin []byte, name string, args ...string) ([]byte, error) {
+	cmd := exec.Command(name, args...)
+	cmd.Stdin = bytes.NewReader(stdin)
+	cmd.Stderr = os.Stderr
+	return cmd.Output()
+}
+
 func environ() map[string]string {
 	env := map[string]string{}
 	for _, kv := range os.Environ() {
@@ -107,6 +116,7 @@ func main() {
 		Now:         time.Now,
 		Keyring:     credstore.System{},
 		Git:         git,
+		Run:         run,
 	}
 	os.Exit(cli.Run(os.Args[1:], h))
 }
