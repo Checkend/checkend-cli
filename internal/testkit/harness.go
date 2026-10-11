@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -79,6 +80,10 @@ type Harness struct {
 	Calls []Call
 	// DNS answers host lookups.
 	DNS map[string][]string
+	// HTTP is the HTTP client of the CLI (nil: the default).
+	HTTP *http.Client
+	// Cloudflare is the fake of the Cloudflare API (nil: none).
+	Cloudflare *FakeCloudflare
 }
 
 // Call is one program that the CLI ran.
@@ -152,7 +157,7 @@ func (h *Harness) Run(argv []string, opts ...Options) Result {
 		},
 		ReadStdin: func() (string, error) { return o.Stdin, nil },
 		Stdin:     strings.NewReader(o.Stdin),
-		HTTP:      nil,
+		HTTP:      h.HTTP,
 		Now:       func() time.Time { return time.Date(2026, 10, 10, 12, 0, 0, 0, time.UTC) },
 		Keyring:   h.Keyring,
 		Git: func(dir string, args ...string) (string, error) {
@@ -161,6 +166,9 @@ func (h *Harness) Run(argv []string, opts ...Options) Result {
 			}
 			return "", fmt.Errorf("fatal: not a git repository")
 		},
+	}
+	if h.Cloudflare != nil {
+		hst.CloudflareAPI = h.Cloudflare.URL
 	}
 	if h.Releases != nil {
 		hst.ReleaseAPI, hst.ReleaseKeys = h.Releases.API, h.Releases.PublicKeys()

@@ -38,6 +38,8 @@ type Host struct {
 	// keys (tests only; a release build leaves them empty).
 	ReleaseAPI  string
 	ReleaseKeys map[string][]byte
+	// CloudflareAPI replaces https://api.cloudflare.com/client/v4 (tests only).
+	CloudflareAPI string
 	// Run runs a program (ssh, ssh-keyscan, docker) with stdin and returns its stdout. Tests
 	// fake it.
 	Run func(stdin []byte, name string, args ...string) ([]byte, error)

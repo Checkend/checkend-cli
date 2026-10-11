@@ -43,6 +43,12 @@ The first release. Nothing is tagged or published yet. Until then, build `ce` fr
   a confirmation; never skipped), installs Docker from Docker's apt repository (key fingerprint
   checked), and starts Checkend behind Caddy (the domain must point at the server) or a
   Cloudflare Tunnel (`--tunnel`). Secrets go to the server only through stdin.
+- `ce install cloudflare` installs a signed server release on a Cloudflare account: it creates
+  the D1 database, records a Time Travel bookmark before the migrations, uploads the Worker
+  bundle, sets the secrets through the API, adds the cron trigger and the workers.dev URL, and
+  prints the setup link. The API token comes from a link that fills in the minimal permissions,
+  and stays in the keychain. It refuses a Worker or a database of the same name that is not a
+  Checkend install, and a database with newer migrations. `--r2` adds the R2 bucket for blobs.
 - Install methods for the first release: Homebrew, `install.sh` and the npm wrapper
   `@checkend/cli`. Each one checks the SHA-256 of the binary.
 

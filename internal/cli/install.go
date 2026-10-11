@@ -21,7 +21,7 @@ import (
 // the setup link of the web UI.
 
 func installCommands() []*Command {
-	return []*Command{installDockerCommand(), installSSHCommand()}
+	return []*Command{installDockerCommand(), installSSHCommand(), installCloudflareCommand()}
 }
 
 // releaseSource is the source of the server releases (tests replace it through the host).
@@ -242,6 +242,9 @@ func recordInstall(s *Session, url string, install config.Install, adminToken st
 	if err := config.SaveInstall(s.Host, url, &install); err != nil {
 		return "", err
 	}
+	if adminToken == "" {
+		return "", nil
+	}
 	return config.SaveToken(s.Host, url, adminToken)
 }
 
@@ -252,7 +255,7 @@ type installResult struct {
 	Dir      string   `json:"dir,omitempty"`
 	Target   string   `json:"target,omitempty"`
 	Files    []string `json:"files,omitempty"`
-	Login    string   `json:"login"`
+	Login    string   `json:"login,omitempty"`
 	SetupURL string   `json:"setup_url,omitempty"`
 	Next     []string `json:"next"`
 }
@@ -262,11 +265,14 @@ func renderInstall(r installResult, title string) string {
 	if len(r.Files) > 0 {
 		lines = append(lines, "Wrote "+strings.Join(r.Files, ", ")+" (.env has the secrets; mode 600).")
 	}
-	where := "the OS keychain"
-	if r.Login != config.StorageKeychain {
-		where = r.Login + " (mode 600)"
+	if r.Login != "" {
+		where := "the OS keychain"
+		if r.Login != config.StorageKeychain {
+			where = r.Login + " (mode 600)"
+		}
+		lines = append(lines, fmt.Sprintf("Saved the admin token for %s in %s.", r.URL, where))
 	}
-	lines = append(lines, fmt.Sprintf("Saved the admin token for %s in %s.", r.URL, where), "")
+	lines = append(lines, "")
 	if len(r.Next) > 0 {
 		lines = append(lines, "Next:")
 		for _, n := range r.Next {
