@@ -348,6 +348,7 @@ func installSSHCommand() *Command {
 				return err
 			}
 			env := parseEnv(p.Env)
+			oldCode := env.values["SETUP_CODE"]
 			for _, k := range env.keys {
 				if !envValuePattern.MatchString(env.values[k]) {
 					return clierr.Fail(fmt.Sprintf("%s/.env on the server has a value that ce cannot keep.", dir))
@@ -393,7 +394,7 @@ func installSSHCommand() *Command {
 			}
 			plan = append(plan,
 				fmt.Sprintf("Write %s/compose.yaml (Checkend, a nightly backup, a volume, restarts, %s).", dir, front),
-				secretsLine(dir+"/.env", kept, p.Env == ""),
+				secretsLine(dir+"/.env", kept, p.Env == "", oldCode != "" && env.values["SETUP_CODE"] == oldCode),
 				"Start the containers and wait until Checkend is healthy.",
 				fmt.Sprintf("Save the admin token for %s in the OS keychain.", url))
 			backup := ""

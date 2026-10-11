@@ -169,7 +169,7 @@ func (e *envFile) String() string {
 }
 
 // secrets fills ADMIN_TOKEN and ENCRYPTION_KEYS when they are missing, and writes a new setup
-// code (an upgrade keeps the one there is). It returns the setup code for the link ("" when
+// code unless the one there is stays valid long enough (an upgrade always keeps it). It returns the setup code for the link ("" when
 // kept) and the keys that it kept.
 func (e *envFile) secrets(now time.Time, newCode bool) (code string, kept []string) {
 	if len(e.values["ADMIN_TOKEN"]) >= 32 {
@@ -185,14 +185,26 @@ func (e *envFile) secrets(now time.Time, newCode bool) (code string, kept []stri
 	if !newCode && e.values["SETUP_CODE"] != "" {
 		return "", kept
 	}
+	// A code that is valid for at least 4 more hours stays, so that a second run changes nothing.
+	if unix, old, ok := strings.Cut(e.values["SETUP_CODE"], "."); ok && old != "" {
+		if at, err := strconv.ParseInt(unix, 10, 64); err == nil {
+			if age := now.Sub(time.Unix(at, 0)); age >= -5*time.Minute && age < 20*time.Hour {
+				return old, kept
+			}
+		}
+	}
 	stored, code := newSetupCode(now)
 	e.set("SETUP_CODE", stored)
 	return code, kept
 }
 
-func secretsLine(file string, kept []string, isNew bool) string {
+func secretsLine(file string, kept []string, isNew bool, sameCode bool) string {
 	if !isNew && len(kept) == 2 {
-		return fmt.Sprintf("Write %s (mode 600): keep ADMIN_TOKEN and ENCRYPTION_KEYS; write a new setup code.", file)
+		code := "write a new setup code"
+		if sameCode {
+			code = "keep the setup code"
+		}
+		return fmt.Sprintf("Write %s (mode 600): keep ADMIN_TOKEN and ENCRYPTION_KEYS; %s.", file, code)
 	}
 	return fmt.Sprintf("Write %s (mode 600): a new ADMIN_TOKEN (64 characters), ENCRYPTION_KEYS and setup code.", file)
 }
@@ -378,6 +390,7 @@ func installDockerCommand() *Command {
 			envPath, composePath := filepath.Join(dir, ".env"), filepath.Join(dir, "compose.yaml")
 			old, readErr := os.ReadFile(envPath)
 			env := parseEnv(string(old))
+			oldCode := env.values["SETUP_CODE"]
 			code, kept := env.secrets(s.Host.Now(), s.upgrade == nil)
 			env.set("PUBLIC_URL", url)
 			s.Out.Hide(env.values["ADMIN_TOKEN"])
@@ -387,7 +400,7 @@ func installDockerCommand() *Command {
 				releaseLine(s, rel),
 				"Image: " + rel.Manifest.Image.Ref(),
 				fmt.Sprintf("Write %s (Checkend on 127.0.0.1:%d, a nightly backup, a volume, restarts).", composePath, port),
-				secretsLine(envPath, kept, readErr != nil),
+				secretsLine(envPath, kept, readErr != nil, oldCode != "" && env.values["SETUP_CODE"] == oldCode),
 				fmt.Sprintf("Save the admin token for %s in the OS keychain.", url),
 			}
 			backup := fmt.Sprintf("/data/backups/checkend-before-%s-%s.sqlite", rel.Manifest.Version, s.Host.Now().UTC().Format("20060102-150405"))

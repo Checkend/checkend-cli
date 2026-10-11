@@ -115,7 +115,7 @@ func toStrings(v any) []string {
 	return out
 }
 
-func TestInstallDockerAgainKeepsTheSecretsAndMakesANewSetupCode(t *testing.T) {
+func TestInstallDockerAgainKeepsTheSecretsAndAValidSetupCode(t *testing.T) {
 	f, cli := installer(t)
 	f.Publish("0.3.0")
 	dir := filepath.Join(cli.Repo, "checkend")
@@ -127,11 +127,10 @@ func TestInstallDockerAgainKeepsTheSecretsAndMakesANewSetupCode(t *testing.T) {
 	second := readEnv(t, filepath.Join(dir, ".env"))
 	Equal(t, second["ADMIN_TOKEN"], first["ADMIN_TOKEN"])
 	Equal(t, second["ENCRYPTION_KEYS"], first["ENCRYPTION_KEYS"])
-	if second["SETUP_CODE"] == first["SETUP_CODE"] {
-		t.Error("the setup code did not change")
-	}
+	// The setup code is still valid, so it stays, and the link is the same.
+	Equal(t, second["SETUP_CODE"], first["SETUP_CODE"])
 	Contains(t, r.Stdout, "Checkend 0.4.0")
-	Contains(t, r.Stdout, "/setup#")
+	Contains(t, r.Stdout, "/setup#"+strings.SplitN(first["SETUP_CODE"], ".", 2)[1])
 	noSecrets(t, r, second)
 	// An install record (no secrets) for upgrade, backup, status and uninstall.
 	data, _ := os.ReadFile(filepath.Join(cli.Home, ".config", "checkend", "installs.json"))
@@ -160,4 +159,16 @@ func TestInstallDockerShowsThePlanAndAsksFirst(t *testing.T) {
 	Code(t, r, 0)
 	Matches(t, r.Stdout, regexp.QuoteMeta("http://localhost:9000/setup#"))
 	NotContains(t, r.All, readEnv(t, filepath.Join(cli.Repo, "srv", ".env"))["ADMIN_TOKEN"])
+}
+
+func TestInstallDockerAgainReplacesASetupCodeThatExpiresSoon(t *testing.T) {
+	f, cli := installer(t)
+	f.Publish("0.3.0")
+	dir := filepath.Join(cli.Repo, "checkend")
+	// 20 hours before the clock of the harness: the link would expire in 4 hours.
+	cli.Write("checkend/.env", "ADMIN_TOKEN=test-admin-token-0123456789abcdef0123456789\nENCRYPTION_KEYS=k1:dGVzdA==\nSETUP_CODE=1791561600.test-old-code\n")
+	Code(t, cli.Run([]string{"install", "docker", "--yes"}), 0)
+	env := readEnv(t, filepath.Join(dir, ".env"))
+	Matches(t, env["SETUP_CODE"], `^1791633600\.`)
+	Equal(t, env["ADMIN_TOKEN"], "test-admin-token-0123456789abcdef0123456789")
 }

@@ -153,14 +153,12 @@ func TestInstallSSHAcceptsAHostKeyFromKnownHosts(t *testing.T) {
 	_ = os.WriteFile(filepath.Join(cli.Home, ".ssh", "known_hosts"), []byte("203.0.113.7 ssh-ed25519 "+hostBlob+"\n"), 0o600)
 	Code(t, cli.Run(append(sshArgs, "--yes")), 0)
 	first := readEnv(t, writeTemp(t, srv.env))
-	// Again: the secrets on the server stay; the setup code is new.
+	// Again: the secrets on the server stay, and so does the setup code (still valid).
 	Code(t, cli.Run(append(sshArgs, "--yes")), 0)
 	second := readEnv(t, writeTemp(t, srv.env))
 	Equal(t, second["ADMIN_TOKEN"], first["ADMIN_TOKEN"])
 	Equal(t, second["ENCRYPTION_KEYS"], first["ENCRYPTION_KEYS"])
-	if second["SETUP_CODE"] == first["SETUP_CODE"] {
-		t.Error("the setup code did not change")
-	}
+	Equal(t, second["SETUP_CODE"], first["SETUP_CODE"])
 }
 
 func TestInstallSSHAsksForTheHostKeyAndThePlanOnATerminal(t *testing.T) {
