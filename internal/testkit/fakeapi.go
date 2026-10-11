@@ -284,6 +284,9 @@ func (f *FakeAPI) route(r *Request) *Reply {
 	if r.Method == "GET" && r.Path == "/agent/setup.md" {
 		return &Reply{Status: 200, Raw: f.SetupMD, Headers: map[string]string{"Content-Type": "text/markdown; charset=utf-8"}}
 	}
+	if r.Method == "GET" && strings.HasPrefix(r.Path, "/agent/tasks/") {
+		return &Reply{Status: 200, Raw: "# " + strings.TrimPrefix(r.Path, "/agent/tasks/") + "\n\n## Steps\n\n1. Replace the Sentry DSN.\n", Headers: map[string]string{"Content-Type": "text/markdown; charset=utf-8"}}
+	}
 	if r.Path == "/mcp" {
 		return f.mcp(r)
 	}
