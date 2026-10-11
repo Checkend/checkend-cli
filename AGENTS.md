@@ -90,6 +90,7 @@ install.sh          The install script (macOS and Linux).
 ## Commits and pull requests
 
 - Small commits. Each commit passes `make check`.
+- Add each change that users can see to `CHANGELOG.md`, under `[Unreleased]`.
 - Sign off every commit (Developer Certificate of Origin): `git commit -s`. CI checks it.
 - Run `git config core.hooksPath .githooks` once per clone. The pre-commit hook blocks private
   planning files.
