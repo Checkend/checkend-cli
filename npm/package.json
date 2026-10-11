@@ -1,0 +1,25 @@
+{
+  "name": "@checkend/cli",
+  "version": "0.0.0",
+  "description": "The Checkend CLI (ce): error tracking for coding agents. Downloads the ce binary.",
+  "license": "MIT",
+  "author": "Furvur",
+  "homepage": "https://github.com/Checkend/checkend-cli",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Checkend/checkend-cli.git",
+    "directory": "npm"
+  },
+  "type": "module",
+  "bin": {
+    "ce": "bin/ce.js",
+    "checkend": "bin/ce.js"
+  },
+  "files": ["bin", "lib", "checksums.txt", "LICENSE", "README.md"],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test"
+  }
+}

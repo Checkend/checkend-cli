@@ -1,8 +1,11 @@
 node_modules/
-dist/
+/dist/
 coverage/
 *.log
 .DS_Store
 .env
 .checkend.json
-bin/
+/bin/
+# Written by the release workflow
+npm/checksums.txt
+npm/LICENSE

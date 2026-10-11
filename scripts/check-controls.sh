@@ -2,6 +2,7 @@
 # Fails when a tracked text file has a literal C1 control, bidirectional control or line/paragraph
 # separator (Trojan Source). Write them as escape sequences instead.
 set -euo pipefail
+# shellcheck disable=SC2016 # the single-quoted text is Perl code
 found=$(git ls-files -z | xargs -0 perl -CSD -ne '
   BEGIN { $| = 1 }
   next if -B $ARGV;

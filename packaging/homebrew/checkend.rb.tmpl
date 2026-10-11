@@ -1,0 +1,40 @@
+# Homebrew formula for a tap (for example Checkend/homebrew-tap), made from this template with
+# scripts/homebrew-formula.sh <version> <checksums.txt>. Install: brew install checkend/tap/checkend
+class Checkend < Formula
+  desc "Command-line interface for Checkend, open-source error tracking for coding agents"
+  homepage "https://github.com/Checkend/checkend-cli"
+  version "@VERSION@"
+  license "MIT"
+
+  on_macos do
+    on_arm do
+      url "https://github.com/Checkend/checkend-cli/releases/download/v@VERSION@/ce_@VERSION@_darwin_arm64.tar.gz"
+      sha256 "@SHA_DARWIN_ARM64@"
+    end
+    on_intel do
+      url "https://github.com/Checkend/checkend-cli/releases/download/v@VERSION@/ce_@VERSION@_darwin_amd64.tar.gz"
+      sha256 "@SHA_DARWIN_AMD64@"
+    end
+  end
+
+  on_linux do
+    on_arm do
+      url "https://github.com/Checkend/checkend-cli/releases/download/v@VERSION@/ce_@VERSION@_linux_arm64.tar.gz"
+      sha256 "@SHA_LINUX_ARM64@"
+    end
+    on_intel do
+      url "https://github.com/Checkend/checkend-cli/releases/download/v@VERSION@/ce_@VERSION@_linux_amd64.tar.gz"
+      sha256 "@SHA_LINUX_AMD64@"
+    end
+  end
+
+  def install
+    bin.install "ce"
+    bin.install_symlink "ce" => "checkend"
+  end
+
+  test do
+    assert_match version.to_s, shell_output("#{bin}/ce --version")
+    assert_match "Unknown command", shell_output("#{bin}/checkend cd 2>&1", 2)
+  end
+end

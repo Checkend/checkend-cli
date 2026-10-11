@@ -1,0 +1,61 @@
+# Release builds of ce. A maintainer runs this through .github/workflows/release.yml when they
+# push a tag (vX.Y.Z). Check it locally: goreleaser check && goreleaser release --snapshot --clean --skip=sbom
+version: 2
+project_name: ce
+
+before:
+  hooks:
+    - go mod tidy -diff
+
+builds:
+  - id: ce
+    main: ./cmd/ce
+    binary: ce
+    env:
+      - CGO_ENABLED=0
+    goos: [darwin, linux, windows]
+    goarch: [amd64, arm64]
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X github.com/Checkend/checkend-cli/internal/version.Version={{ .Version }}
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+archives:
+  # For people, Homebrew and install.sh: ce_1.2.3_darwin_arm64.tar.gz (zip on Windows).
+  - id: archive
+    ids: [ce]
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    name_template: "ce_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - LICENSE
+      - README.md
+  # The plain binary, for the npm wrapper (Node has no tar): ce_darwin_arm64, ce_windows_amd64.exe.
+  - id: binary
+    ids: [ce]
+    formats: [binary]
+    name_template: "ce_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+sboms:
+  - artifacts: archive
+
+release:
+  github:
+    owner: Checkend
+    name: checkend-cli
+  prerelease: auto
+  footer: |
+    Install: `brew install checkend/tap/checkend`, `npx @checkend/cli`, or
+    `curl -fsSL https://raw.githubusercontent.com/Checkend/checkend-cli/main/install.sh | sh`.
+    Check a download with checksums.txt (SHA-256).
+
+changelog:
+  use: git
+  sort: asc
