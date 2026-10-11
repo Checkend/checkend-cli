@@ -33,6 +33,10 @@ func Normalize(input string) (string, error) {
 	if u.User != nil {
 		return "", clierr.UsageError("Do not put credentials in the URL.", "Use `ce login` to save the token.")
 	}
+	path := strings.TrimSuffix(u.EscapedPath(), "/")
+	if err := checkPath(path); err != nil {
+		return "", err
+	}
 	port := u.Port()
 	if (scheme == "https" && port == "443") || (scheme == "http" && port == "80") {
 		port = ""
@@ -44,5 +48,23 @@ func Normalize(input string) (string, error) {
 			origin = scheme + "://[" + host + "]"
 		}
 	}
-	return origin + strings.TrimRight(u.EscapedPath(), "/"), nil
+	return origin + path, nil
+}
+
+// checkPath checks the base path of a hosted instance (https://hosted.example/<id>). The
+// token is saved for the full URL, so a path must name one place only: no empty, "." or ".."
+// segments, and no encoded "/", "\\" or ".".
+func checkPath(path string) error {
+	if path == "" {
+		return nil
+	}
+	for _, segment := range strings.Split(path, "/")[1:] {
+		lower := strings.ToLower(segment)
+		if segment == "" || segment == "." || segment == ".." ||
+			strings.Contains(lower, "%2f") || strings.Contains(lower, "%5c") || strings.Contains(lower, "%2e") || strings.Contains(segment, "\\") {
+			return clierr.UsageError(fmt.Sprintf("The URL path %q is not valid.", path),
+				"Use the URL of your Checkend instance as it shows it, for example https://cloud.example.com/k7q2x9.")
+		}
+	}
+	return nil
 }

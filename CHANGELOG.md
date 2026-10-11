@@ -32,6 +32,8 @@ The first release. Nothing is tagged or published yet. Until then, build `ce` fr
   `--json`; text everywhere with `--plain`.
 - Exit codes: 0 OK, 1 error, 2 usage, 3 not found, 4 conflict, 5 authentication, 6 accepted and
   waiting for approval.
+- Every command works with an instance under a base path (`--url https://host.example/<id>`):
+  the requests, the DSNs, `ce setup`, `ce mcp` and `ce sourcemaps upload` keep the path.
 - Install methods for the first release: Homebrew, `install.sh` and the npm wrapper
   `@checkend/cli`. Each one checks the SHA-256 of the binary.
 
@@ -47,5 +49,8 @@ The first release. Nothing is tagged or published yet. Until then, build `ce` fr
 - All server text is cleaned of terminal escape sequences and control characters before it is
   printed.
 - An unknown command or option exits with code 2 and does nothing.
+- A saved token is for its full URL, with the base path: two instances under one host never
+  share a token. A URL path with empty, `.` or `..` segments, or an encoded `/`, `\` or `.`,
+  exits with code 2.
 
 [Unreleased]: https://github.com/Checkend/checkend-cli/commits/main

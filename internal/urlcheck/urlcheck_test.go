@@ -54,3 +54,26 @@ func TestRefusesOtherSchemesCredentialsAndBadURLs(t *testing.T) {
 		}
 	}
 }
+
+func TestKeepsTheBasePathOfAHostedInstance(t *testing.T) {
+	for in, want := range map[string]string{
+		"https://cloud.example.com/k7q2x9":          "https://cloud.example.com/k7q2x9",
+		"https://cloud.example.com/k7q2x9/":         "https://cloud.example.com/k7q2x9",
+		"https://Cloud.Example.com:443/k7q2x9/a-b/": "https://cloud.example.com/k7q2x9/a-b",
+	} {
+		got, err := Normalize(in)
+		if err != nil || got != want {
+			t.Errorf("Normalize(%q) = %q, %v; want %q", in, got, err, want)
+		}
+	}
+}
+
+func TestRefusesAPathThatNamesMoreThanOnePlace(t *testing.T) {
+	for _, path := range []string{"/a/../b", "/./a", "//a", "/a//", "/a//b", "/a/%2e%2e", "/a%2Fb", "/a%5cb", `/a\b`} {
+		_, err := Normalize("https://cloud.example.com" + path)
+		var cerr *clierr.Error
+		if !errors.As(err, &cerr) || cerr.Code != clierr.Usage || !strings.Contains(err.Error(), "path") {
+			t.Errorf("Normalize(%q): %v", path, err)
+		}
+	}
+}
