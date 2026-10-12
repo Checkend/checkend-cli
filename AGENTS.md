@@ -92,7 +92,7 @@ install.sh          The install script (macOS and Linux).
    `internal/testkit/fakeapi.go` first, then run the end-to-end test against a real server.
 4. **Tests never touch the real keychain.** The harness uses `credstore.Memory`.
 5. **Agents do not publish.** Do not push to `main`, publish packages, or create tags or
-   releases. A maintainer does that.
+   releases. A maintainer does that, with the steps in [RELEASING.md](RELEASING.md).
 
 ## Commits and pull requests
 
