@@ -7,6 +7,13 @@ public interface.
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-10-12
+
+### Fixed
+
+- The npm wrapper `@checkend/cli` is published. The npm job of 0.3.0 stopped on a test that
+  found the checksums of the release in the package folder; nothing else of 0.3.0 changes.
+
 ## [0.3.0] - 2026-10-12
 
 The first release.
