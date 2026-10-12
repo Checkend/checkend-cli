@@ -55,6 +55,7 @@ func TestSetupWithoutAKeyAndNoTerminalPointsToKeyStdin(t *testing.T) {
 	}
 	r = cli.Run([]string{"setup", "--url", api.URL, "--key-stdin"}, Options{Stdin: "ck_not_a_setup_key_0123456789\n"})
 	Code(t, r, 2)
+	Equal(t, r.ErrJSON(t)["error"], "That is not a setup key: a setup key starts with cks_.")
 	Equal(t, len(api.Requests()), 0)
 }
 

@@ -51,7 +51,7 @@ func setupKey(s *Session) (string, error) {
 	}
 	s.Out.Hide(key)
 	if key != "" && !setupKeyPattern.MatchString(key) {
-		return "", clierr.UsageError("The setup key is not valid: it starts with cks_.", newKeyHint)
+		return "", clierr.UsageError("That is not a setup key: a setup key starts with cks_.", newKeyHint)
 	}
 	return key, nil
 }
@@ -68,7 +68,7 @@ func promptKey(s *Session) (string, error) {
 	key = strings.TrimSpace(key)
 	s.Out.Hide(key)
 	if key != "" && !setupKeyPattern.MatchString(key) {
-		return "", clierr.UsageError("The setup key is not valid: it starts with cks_.", newKeyHint)
+		return "", clierr.UsageError("That is not a setup key: a setup key starts with cks_.", newKeyHint)
 	}
 	return key, nil
 }
