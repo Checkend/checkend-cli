@@ -1,11 +1,14 @@
 // Finds or downloads the ce binary of this package version. The SHA-256 of every binary is in
-// checksums.txt in this package (written at release time), so a download that was changed on
-// the way does not run.
+// checksums.txt in this package (written at release time). Its SSH signature (checksums.txt.sig,
+// a trusted key of keys.js) is checked first, then the SHA-256 of the download: a changed
+// checksums.txt or a changed download does not run.
 import { createHash } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { ALLOWED_SIGNERS } from "./keys.js";
+import { NAMESPACE, verifySignature } from "./sshsig.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
@@ -31,7 +34,14 @@ function cacheDir(env) {
 function expectedSha(asset) {
 	const file = join(root, "checksums.txt");
 	if (!existsSync(file)) throw new Error("This package has no checksums.txt, so it cannot check the ce binary.");
-	for (const line of readFileSync(file, "utf8").split("\n")) {
+	if (ALLOWED_SIGNERS.length === 0) {
+		throw new Error("This package trusts no release key yet, so it installs nothing. Use: go install github.com/Checkend/checkend-cli/cmd/ce@latest");
+	}
+	const sig = join(root, "checksums.txt.sig");
+	if (!existsSync(sig)) throw new Error("This package has no signature (checksums.txt.sig), so it installs nothing.");
+	const text = readFileSync(file);
+	verifySignature(readFileSync(sig, "utf8"), text, NAMESPACE, ALLOWED_SIGNERS);
+	for (const line of text.toString("utf8").split("\n")) {
 		const [sha, name] = line.trim().split(/\s+/);
 		if (name === asset && /^[0-9a-f]{64}$/.test(sha ?? "")) return sha;
 	}

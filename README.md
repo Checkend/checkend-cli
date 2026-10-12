@@ -23,8 +23,11 @@ curl -fsSL https://raw.githubusercontent.com/Checkend/checkend-cli/main/install.
 npx @checkend/cli --version
 ```
 
-`install.sh` and the npm package check the SHA-256 of the binary before they run it. Until the
-first release, build it from source (Go 1.26 or later):
+`install.sh` and the npm package first check the SSH signature of `checksums.txt` (made with a
+Checkend release key, namespace `checkend-cli-release`), then the SHA-256 of the binary. Without
+a valid signature they install nothing. `install.sh` needs `ssh-keygen` from OpenSSH 8.1 or later
+(macOS and current Linux have it). See [SECURITY.md](SECURITY.md) to check a download by hand.
+Until the first release, build it from source (Go 1.26 or later):
 
 ```sh
 go install github.com/Checkend/checkend-cli/cmd/ce@latest

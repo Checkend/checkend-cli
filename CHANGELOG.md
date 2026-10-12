@@ -65,7 +65,10 @@ The first release. Nothing is tagged or published yet. Until then, build `ce` fr
 - Every error ends with a link to the docs section that explains it; JSON errors have `"docs"`
   next to `"error"` and `"hint"`.
 - Install methods for the first release: Homebrew, `install.sh` and the npm wrapper
-  `@checkend/cli`. Each one checks the SHA-256 of the binary.
+  `@checkend/cli`. `install.sh` and the npm wrapper first check the SSH signature of
+  `checksums.txt` (a Checkend release key, namespace `checkend-cli-release`), then the SHA-256 of
+  the binary; without a valid signature they install nothing. Homebrew checks the SHA-256 of
+  the formula.
 
 ### Security
 

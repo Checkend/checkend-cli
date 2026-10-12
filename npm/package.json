@@ -15,7 +15,7 @@
     "ce": "bin/ce.js",
     "checkend": "bin/ce.js"
   },
-  "files": ["bin", "lib", "checksums.txt", "LICENSE", "README.md"],
+  "files": ["bin", "lib", "checksums.txt", "checksums.txt.sig", "LICENSE", "README.md"],
   "engines": {
     "node": ">=18"
   },
