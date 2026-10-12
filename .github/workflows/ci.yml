@@ -80,6 +80,13 @@ jobs:
       - name: npm wrapper tests
         working-directory: npm
         run: npm test
+      # As in the release job: the checksums of a release are in npm/ when the tests run.
+      - name: npm wrapper tests with release files present
+        working-directory: npm
+        run: |
+          printf '%s  ce_linux_amd64\n' "$(printf '0%.0s' $(seq 64))" > checksums.txt
+          printf 'not a signature\n' > checksums.txt.sig
+          npm test
 
   secrets:
     name: Secret scan (gitleaks, full history)

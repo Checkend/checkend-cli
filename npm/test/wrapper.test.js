@@ -67,7 +67,10 @@ function sshSign(key, message, namespace = NAMESPACE) {
  */
 function packageCopy(checksum, { sig = "valid", trust = [testLine] } = {}) {
 	const dir = mkdtempSync(join(tmpdir(), "ce-npm-"));
-	cpSync(source, dir, { recursive: true, filter: (p) => !p.includes(`${join(source, "test")}`) });
+	// Not the tests, and not the checksums of a real release: the release job puts them into npm/
+	// before it runs the tests, and each test writes its own.
+	const own = new Set([join(source, "test"), join(source, "checksums.txt"), join(source, "checksums.txt.sig")]);
+	cpSync(source, dir, { recursive: true, filter: (p) => ![...own].some((o) => p === o || p.startsWith(`${o}/`)) });
 	const pkg = join(dir, "package.json");
 	writeFileSync(pkg, JSON.stringify({ name: "@checkend/cli", version: "1.2.3", type: "module" }));
 	const keys = trust.map((key, i) => `\t{ id: "test-${i}", key: ${JSON.stringify(key)} }, // TEST KEY\n`).join("");
