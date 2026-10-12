@@ -17,6 +17,7 @@ a script, a pipe), or with `--json`, it prints the API JSON.
 `ce` is one binary for macOS, Linux and Windows. Install it with one of these:
 
 ```sh
+brew tap checkend/tap
 brew install checkend/tap/checkend
 curl -fsSL https://raw.githubusercontent.com/Checkend/checkend-cli/main/install.sh | sh
 npx @checkend/cli --version

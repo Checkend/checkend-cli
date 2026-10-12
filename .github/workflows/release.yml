@@ -70,9 +70,6 @@ jobs:
           umask 077
           printf '%s\n' "$SIGNING_KEY" > "$RUNNER_TEMP/cli-release-key"
           ssh-keygen -Y sign -q -f "$RUNNER_TEMP/cli-release-key" -n checkend-cli-release checksums.txt
-      - name: Remove the key
-        if: always()
-        run: rm -f "$RUNNER_TEMP/cli-release-key"
       - name: Check the signature with the keys of install.sh
         run: |
           sed -n '/^# BEGIN ALLOWED SIGNERS$/,/^# END ALLOWED SIGNERS$/p' install.sh > "$RUNNER_TEMP/allowed_signers"
@@ -94,6 +91,35 @@ jobs:
         run: |
           gh release upload "$TAG" checksums.txt.sig --repo "$GITHUB_REPOSITORY"
           gh release edit "$TAG" --draft=false --repo "$GITHUB_REPOSITORY"
+      # The formula points at the published archives, so this comes after the publish. A deploy
+      # key with write access to Checkend/homebrew-tap only; ssh checks GitHub's pinned host key.
+      - name: Update the Homebrew tap
+        env:
+          TAP_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set +x
+          if [ -z "$TAP_KEY" ]; then
+            echo "::warning::The secret HOMEBREW_TAP_DEPLOY_KEY is missing: update Checkend/homebrew-tap by hand (RELEASING.md, step 5)."
+            exit 0
+          fi
+          scripts/homebrew-formula.sh "${TAG#v}" checksums.txt > "$RUNNER_TEMP/checkend.rb"
+          ruby -c "$RUNNER_TEMP/checkend.rb"
+          umask 077
+          printf '%s\n' "$TAP_KEY" > "$RUNNER_TEMP/tap-key"
+          printf '%s\n' "github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl" > "$RUNNER_TEMP/github_known_hosts"
+          export GIT_SSH_COMMAND="ssh -i $RUNNER_TEMP/tap-key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$RUNNER_TEMP/github_known_hosts"
+          git clone -q --depth 1 git@github.com:Checkend/homebrew-tap.git "$RUNNER_TEMP/tap"
+          cp "$RUNNER_TEMP/checkend.rb" "$RUNNER_TEMP/tap/Formula/checkend.rb"
+          cd "$RUNNER_TEMP/tap"
+          if git diff --quiet; then echo "The tap has this formula already."; exit 0; fi
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -am "Update ce to ${TAG#v}"
+          git push -q origin HEAD
+          echo "Updated Checkend/homebrew-tap to ${TAG#v}."
+      - name: Remove the keys
+        if: always()
+        run: rm -f "$RUNNER_TEMP/cli-release-key" "$RUNNER_TEMP/tap-key"
 
   npm:
     name: npm wrapper (@checkend/cli)
@@ -152,7 +178,7 @@ jobs:
         run: |
           scripts/homebrew-formula.sh "${TAG#v}" checksums.txt > checkend.rb
           ruby -c checkend.rb
-      # A maintainer commits checkend.rb to Checkend/homebrew-tap (RELEASING.md, step 5).
+      # The sign job updates the tap; this artifact is for a manual update (RELEASING.md, step 5).
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: homebrew-formula
@@ -163,7 +189,7 @@ jobs:
           RUN: ${{ github.run_id }}
         run: |
           {
-            echo "### Homebrew: commit the formula of $TAG to Checkend/homebrew-tap"
+            echo "### Homebrew: only if the sign job did not update Checkend/homebrew-tap to $TAG"
             echo '```sh'
             echo "gh run download $RUN -R $GITHUB_REPOSITORY -n homebrew-formula -D \"\$(mktemp -d)/f\""
             echo "# then, in a clone of Checkend/homebrew-tap: see RELEASING.md, step 5"

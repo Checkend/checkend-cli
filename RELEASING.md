@@ -35,13 +35,17 @@ is a version tag on `main`. The workflow `.github/workflows/release.yml` does th
 
    ```sh
    curl -fsSL https://raw.githubusercontent.com/Checkend/checkend-cli/main/install.sh | CE_INSTALL_DIR="$(mktemp -d)" sh
+   brew tap checkend/tap && brew install checkend/tap/checkend && ce --version   # after step 5
    npx --prefer-online @checkend/cli@0.3.2 --version
    GOBIN="$(mktemp -d)" go install github.com/Checkend/checkend-cli/cmd/ce@v0.3.2
    ```
 
    `install.sh` prints `checksums.txt is signed by <key id>`. Each `--version` prints the version.
 
-5. Update the Homebrew tap. The run summary has the `gh run download` command with the run ID.
+5. The Homebrew tap. The signing job commits the new formula to `Checkend/homebrew-tap` with the
+   deploy key in the secret `HOMEBREW_TAP_DEPLOY_KEY` (environment `release`). Without that
+   secret, the job warns and you update the tap by hand; the run summary has the `gh run
+   download` command with the run ID:
 
    ```sh
    dir=$(mktemp -d)

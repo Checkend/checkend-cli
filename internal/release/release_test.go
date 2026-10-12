@@ -415,3 +415,53 @@ func serverVersionLess(a, b []string) bool {
 	}
 	return false
 }
+
+// Current Homebrew installs from a tap only after `brew tap`: each place that shows the install
+// shows both lines.
+func TestTheBrewInstructionsTapFirst(t *testing.T) {
+	for _, file := range [][]string{{"README.md"}, {"RELEASING.md"}, {".goreleaser.yaml"}} {
+		text := string(readLF(t, file...))
+		install := strings.Index(text, "brew install checkend/tap/checkend")
+		tap := strings.Index(text, "brew tap checkend/tap")
+		if install < 0 || tap < 0 || tap > install {
+			t.Errorf("%s: want `brew tap checkend/tap` before `brew install checkend/tap/checkend`", file[0])
+		}
+	}
+}
+
+// githubHostKey is the fingerprint of GitHub's ed25519 SSH host key (api.github.com/meta and the
+// GitHub docs): the release workflow pushes to the tap only to that host.
+const githubHostKey = "SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU"
+
+// The sign job (already approved) updates Checkend/homebrew-tap with a deploy key.
+func TestTheReleaseUpdatesTheTap(t *testing.T) {
+	workflow := string(readLF(t, ".github", "workflows", "release.yml"))
+	start := strings.Index(workflow, "\n  sign:\n")
+	if start < 0 {
+		t.Fatal("release.yml has no sign job")
+	}
+	job := workflow[start+1:]
+	if end := regexp.MustCompile(`\n  [a-z-]+:\n`).FindStringIndex(job[1:]); end != nil {
+		job = job[:end[0]+1]
+	}
+	for _, want := range []string{"HOMEBREW_TAP_DEPLOY_KEY", "StrictHostKeyChecking=yes", "IdentitiesOnly=yes",
+		"git@github.com:Checkend/homebrew-tap.git", "Formula/checkend.rb", "scripts/homebrew-formula.sh", "::warning::"} {
+		if !strings.Contains(job, want) {
+			t.Errorf("the sign job has no %q", want)
+		}
+	}
+	if strings.Contains(workflow, "StrictHostKeyChecking=no") {
+		t.Error("release.yml skips a host key check")
+	}
+	if !regexp.MustCompile(`if: always\(\)\n\s+run: rm -f "\$RUNNER_TEMP/cli-release-key" "\$RUNNER_TEMP/tap-key"`).MatchString(job) {
+		t.Error("the sign job does not remove both keys in an always() step")
+	}
+	m := regexp.MustCompile(`github\.com ssh-ed25519 ([A-Za-z0-9+/]+=*)`).FindStringSubmatch(job)
+	if m == nil || fingerprint(t, m[1]) != githubHostKey {
+		t.Errorf("the pinned GitHub host key is not %s: %v", githubHostKey, m)
+	}
+	// Publish first, then the tap: the formula points at the published archives.
+	if strings.Index(job, "gh release edit") > strings.Index(job, "homebrew-tap.git") {
+		t.Error("the tap is updated before the release is published")
+	}
+}

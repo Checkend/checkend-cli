@@ -11,6 +11,10 @@ public interface.
 
 - The release workflow publishes `@checkend/cli` with npm trusted publishing (OIDC from GitHub
   Actions): no npm token is stored any more.
+- The release workflow updates the Homebrew tap `Checkend/homebrew-tap` itself, with a deploy key
+  (secret `HOMEBREW_TAP_DEPLOY_KEY` of the environment `release`; without it, a warning and the
+  manual step of RELEASING.md). Install with `brew tap checkend/tap`, then
+  `brew install checkend/tap/checkend`.
 
 ## [0.3.1] - 2026-10-12
 
