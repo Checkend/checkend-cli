@@ -304,8 +304,8 @@ func TestHomebrewFormula(t *testing.T) {
 
 // install.sh and the npm wrapper trust the same keys, each for the CLI namespace only.
 func TestInstallScriptAndNPMTrustTheSameKeys(t *testing.T) {
-	script, _ := os.ReadFile(filepath.Join(repoRoot(t), "install.sh"))
-	npm, _ := os.ReadFile(filepath.Join(repoRoot(t), "npm", "lib", "keys.js"))
+	script := readLF(t, "install.sh")
+	npm := readLF(t, "npm", "lib", "keys.js")
 	var fromScript, fromNPM []string
 	for _, line := range strings.Split(string(signersBlock.Find(script)), "\n") {
 		f := strings.Fields(line)
@@ -343,7 +343,7 @@ func fingerprint(t *testing.T, key string) string {
 }
 
 func TestTheReleaseKeysMatchTheirFingerprints(t *testing.T) {
-	script, _ := os.ReadFile(filepath.Join(repoRoot(t), "install.sh"))
+	script := readLF(t, "install.sh")
 	got := map[string]string{}
 	for _, line := range strings.Split(string(signersBlock.Find(script)), "\n") {
 		if f := strings.Fields(line); len(f) >= 4 && !strings.HasPrefix(f[0], "#") {
@@ -353,7 +353,7 @@ func TestTheReleaseKeysMatchTheirFingerprints(t *testing.T) {
 	if !maps.Equal(got, releaseKeys) {
 		t.Errorf("install.sh trusts %v, want %v", got, releaseKeys)
 	}
-	npm, _ := os.ReadFile(filepath.Join(repoRoot(t), "npm", "lib", "keys.js"))
+	npm := readLF(t, "npm", "lib", "keys.js")
 	got = map[string]string{}
 	for _, m := range regexp.MustCompile(`id:\s*"([^"]+)",\s*key:\s*"ssh-ed25519 ([A-Za-z0-9+/]+=*)"`).FindAllStringSubmatch(string(npm), -1) {
 		got[m[1]] = fingerprint(t, m[2])
@@ -361,4 +361,14 @@ func TestTheReleaseKeysMatchTheirFingerprints(t *testing.T) {
 	if !maps.Equal(got, releaseKeys) {
 		t.Errorf("npm/lib/keys.js trusts %v, want %v", got, releaseKeys)
 	}
+}
+
+// readLF reads a file of the repo with LF line ends (a Windows checkout can have CRLF).
+func readLF(t *testing.T, path ...string) []byte {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(append([]string{repoRoot(t)}, path...)...))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return []byte(strings.ReplaceAll(string(data), "\r\n", "\n"))
 }
