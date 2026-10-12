@@ -71,9 +71,12 @@ The first release. Nothing is tagged or published yet. Until then, build `ce` fr
   prints only the token to stdout, also when stdout is not a terminal, so that it can go into
   `gh secret set`; with `--json`, stdout is `{"token", …}`. It does not print to a terminal
   without `--show`. On a hosted space it says that an owner makes tokens in Settings → Tokens.
+  `--project <app>` makes a token that writes deploys and source maps only for that app.
   `ce token list` and `ce token revoke <id>` list and revoke tokens.
-- `ce deploy --dry-run` prints the request that it would send and sends nothing. It cannot check
-  the scope of the token (the API has no way to do that without a request) and says so.
+- `ce deploy --dry-run` prints the request that it would send and records nothing. It asks the
+  server which token it has (GET /v1/tokens/current) and fails, as the deploy would, when the
+  token has no `releases:write` scope or is for another app. On an older server without that
+  endpoint, it says that the scope check is not available and goes on.
 - Every error ends with a link to the docs section that explains it; JSON errors have `"docs"`
   next to `"error"` and `"hint"`.
 - Install methods for the first release: Homebrew, `install.sh` and the npm wrapper

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -13,6 +14,9 @@ import (
 	"github.com/Checkend/checkend-cli/internal/docs"
 	"github.com/Checkend/checkend-cli/internal/jv"
 )
+
+// appRef is a public app ID or a slug.
+var appRef = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,47}$`)
 
 // tokenScopes are the scopes of POST /v1/tokens.
 var tokenScopes = []string{"issues:read", "issues:write", "releases:write", "admin"}
@@ -42,9 +46,10 @@ func tokenCreateCommand() *Command {
 	return &Command{
 		Path:    []string{"token", "create"},
 		Summary: "Create an API token and print it once (to a pipe, for example gh secret set)",
-		Usage:   "--scope <scope>... [--name <name>] [--show]",
+		Usage:   "--scope <scope>... [--project <id|slug>] [--name <name>] [--show]",
 		Details: []string{
 			"  --scope <scope>   issues:read, issues:write, releases:write or admin (more than one is OK)",
+			"  --project <app>   Only for this app: it writes deploys and source maps only there",
 			"  --name <name>     A name to find the token later (default: ce token create)",
 			"  --show            Print the token also to a terminal",
 			"",
@@ -53,7 +58,7 @@ func tokenCreateCommand() *Command {
 			"  ce token create --scope releases:write --name github-deploy | gh secret set CHECKEND_TOKEN",
 			"Needs a token with the admin scope. On a hosted space, an owner makes tokens in the web UI.",
 		},
-		Options: map[string]Kind{"scope": List, "name": String, "show": Bool},
+		Options: map[string]Kind{"scope": List, "name": String, "show": Bool, "project": String},
 		Run: func(s *Session) error {
 			var scopes []string
 			for _, sc := range s.List("scope") {
@@ -74,6 +79,10 @@ func tokenCreateCommand() *Command {
 			if len(name) > 100 {
 				return clierr.UsageError("A token name has at most 100 characters.")
 			}
+			project := strings.ToLower(strings.TrimSpace(s.String("project")))
+			if s.Has("project") && !appRef.MatchString(project) {
+				return clierr.UsageError(fmt.Sprintf("%q is not an app ID or slug.", s.String("project")), "Run `ce project list` to see the apps.")
+			}
 			if s.Host.Stdout.IsTTY && !s.Bool("show") {
 				return clierr.UsageError("ce token create does not print a token to a terminal, so that it does not stay in your scrollback.",
 					"Pipe it, for example: ce token create --scope releases:write | gh secret set CHECKEND_TOKEN. Or add --show.")
@@ -82,11 +91,15 @@ func tokenCreateCommand() *Command {
 			if err != nil {
 				return err
 			}
-			raw, err := client.Post("/v1/tokens", map[string]any{"name": name, "scopes": scopes})
+			request := map[string]any{"name": name, "scopes": scopes}
+			if project != "" {
+				request["project"] = project
+			}
+			raw, err := client.Post("/v1/tokens", request)
 			if forbidden(err) {
 				return tokenAdminError(s, client.URL)
 			}
-			if err != nil {
+			if raw, err = api.OrNotFound(raw, err, fmt.Sprintf("App %q not found, so no token was made.", project), "Run `ce project list` to see the apps."); err != nil {
 				return err
 			}
 			body, _ := jv.Decode(raw)
@@ -95,8 +108,12 @@ func tokenCreateCommand() *Command {
 			if !strings.HasPrefix(token, "ck_") {
 				return clierr.Fail("The server did not return a token.")
 			}
-			s.Out.Notice(fmt.Sprintf("Created the token %s (%s, prefix %s). It is shown only this once.",
-				jv.Str(jv.Get(data, "name")), strings.Join(scopes, ", "), jv.Str(jv.Get(data, "prefix"))))
+			app := ""
+			if n := jv.Str(jv.Get(data, "project_name")); n != "" {
+				app = " for the app " + n
+			}
+			s.Out.Notice(fmt.Sprintf("Created the token %s%s (%s, prefix %s). It is shown only this once.",
+				jv.Str(jv.Get(data, "name")), app, strings.Join(scopes, ", "), jv.Str(jv.Get(data, "prefix"))))
 			if s.Bool("json") {
 				s.Out.Data(map[string]any{"token": token, "id": jv.Get(data, "id"), "name": jv.Get(data, "name"),
 					"scopes": jv.Get(data, "scopes"), "prefix": jv.Get(data, "prefix")}, func(any) string { return token })
@@ -185,16 +202,51 @@ func tokenRevokeCommand() *Command {
 	}
 }
 
-// dryRun prints the request of `ce deploy` and sends nothing.
-func dryRun(s *Session, base string, body map[string]any) error {
+// dryRun prints the request of `ce deploy` and records nothing. It asks the server which
+// token it has (GET /v1/tokens/current), to check the scope and the app; an older server
+// has no such endpoint, and then the dry run says so and goes on.
+func dryRun(s *Session, client *api.Client, body map[string]any) error {
 	result := map[string]any{
 		"dry_run":       true,
-		"request":       map[string]any{"method": "POST", "path": "/v1/deploys", "url": base + "/v1/deploys", "body": body},
+		"request":       map[string]any{"method": "POST", "path": "/v1/deploys", "url": client.URL + "/v1/deploys", "body": body},
 		"scope_checked": false,
-		"note":          "Nothing was sent. The API cannot check the scope of a token without a request: the token needs releases:write.",
+	}
+	raw, err := client.Get("/v1/tokens/current", nil)
+	var nf *api.NotFound
+	switch {
+	case errors.As(err, &nf):
+		result["note"] = "Nothing was sent. The scope check is not available on this server (it has no /v1/tokens/current): the token needs releases:write."
+	case err != nil:
+		return err
+	default:
+		decoded, _ := jv.Decode(raw)
+		data := jv.Get(decoded, "data")
+		name := jv.Str(jv.Get(data, "name"))
+		var scopes []string
+		for _, sc := range jv.List(jv.Get(data, "scopes")) {
+			scopes = append(scopes, jv.Str(sc))
+		}
+		if !slices.Contains(scopes, "releases:write") && !slices.Contains(scopes, "admin") {
+			return clierr.New(clierr.Auth, fmt.Sprintf("The token %s has no releases:write scope (it has %s), so the deploy would fail.", name, strings.Join(scopes, ", ")),
+				"Make one: ce token create --scope releases:write --project <app> | gh secret set CHECKEND_TOKEN").WithDocs(docs.Tokens)
+		}
+		result["scope_checked"] = true
+		result["token"] = map[string]any{"type": jv.Get(data, "type"), "name": name, "prefix": jv.Get(data, "prefix"),
+			"scopes": scopes, "project_id": jv.Get(data, "project_id"), "project_name": jv.Get(data, "project_name")}
+		note := fmt.Sprintf("Nothing was sent. The token %s has releases:write", name)
+		if appID := jv.Str(jv.Get(data, "project_id")); appID != "" {
+			app := fmt.Sprintf("%s (%s)", jv.Str(jv.Get(data, "project_name")), appID)
+			ref := fmt.Sprint(body["project"])
+			if _, numeric := strconv.ParseInt(ref, 10, 64); numeric == nil && ref != appID {
+				return clierr.New(clierr.Auth, fmt.Sprintf("The token %s writes only for the app %s, not for the app %s, so the deploy would fail.", name, app, ref),
+					"Use a token of this app: ce token create --scope releases:write --project "+ref).WithDocs(docs.Tokens)
+			}
+			note += fmt.Sprintf(" for the app %s only; check that the app of this deploy (%s) is that app", app, ref)
+		}
+		result["note"] = note + "."
 	}
 	s.Out.Data(result, func(d any) string {
-		lines := []string{"Would send POST " + base + "/v1/deploys:"}
+		lines := []string{"Would send POST " + client.URL + "/v1/deploys:"}
 		req := jv.Get(d, "request", "body")
 		for _, k := range []string{"project", "commit", "release", "environment"} {
 			if v := jv.Str(jv.Get(req, k)); v != "" {

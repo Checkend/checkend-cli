@@ -121,7 +121,7 @@ claude mcp add checkend -- ce mcp --url https://checkend.example.com
 | `ce server backup [--output <file>]` | Back up its database (Cloudflare: a D1 Time Travel bookmark) |
 | `ce server status` | Its version, health, and whether a newer release exists |
 | `ce server uninstall [--delete-data]` | Remove it; the data stays unless `--delete-data` |
-| `ce token create --scope <scope>... [--name <n>] [--show]` | Create an API token; only the token goes to stdout (pipe it to `gh secret set`) |
+| `ce token create --scope <scope>... [--project <app>] [--name <n>] [--show]` | Create an API token; only the token goes to stdout (pipe it to `gh secret set`) |
 | `ce token list` / `ce token revoke <id> [--yes]` | List the tokens (never the tokens themselves); revoke one |
 | `ce update [--yes]` | Update ce itself (Homebrew, npm, the install script or go install) |
 

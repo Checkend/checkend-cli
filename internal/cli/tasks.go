@@ -115,7 +115,7 @@ func deployCommand() *Command {
 				return err
 			}
 			if s.Bool("dry-run") {
-				return dryRun(s, client.URL, body)
+				return dryRun(s, client, body)
 			}
 			raw, err := client.Post("/v1/deploys", body)
 			if raw, err = projectNotFound(raw, err, ref); err != nil {

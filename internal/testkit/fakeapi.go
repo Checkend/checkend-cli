@@ -528,6 +528,11 @@ func (f *FakeAPI) validToken(authorization string) bool {
 			return true
 		}
 	}
+	for _, t := range f.APITokens {
+		if authorization == "Bearer "+t["token"].(string) && t["revoked_at"] == nil {
+			return true
+		}
+	}
 	return false
 }
 
@@ -629,8 +634,24 @@ func IngestURL(dsn *url.URL, endpoint string) string {
 	return dsn.Scheme + "://" + dsn.Host + path[:i] + "/api/" + path[i+1:] + "/" + endpoint + "/"
 }
 
-// tokens are the /v1/tokens routes: they need the admin scope (only f.Token has it here).
+// tokens are the /v1/tokens routes: they need the admin scope (only f.Token has it here),
+// except /v1/tokens/current, which tells any valid token what it is.
 func (f *FakeAPI) tokens(r *Request) *Reply {
+	if r.Method == "GET" && r.Path == "/v1/tokens/current" {
+		if r.Authorization == "Bearer "+f.Token {
+			return &Reply{Status: 200, Body: J{"data": J{"type": "admin_token", "id": nil, "name": "ADMIN_TOKEN", "scopes": []any{"admin"}, "prefix": nil, "project_id": nil, "project_name": nil}}}
+		}
+		for _, t := range f.APITokens {
+			if r.Authorization == "Bearer "+t["token"].(string) {
+				return &Reply{Status: 200, Body: J{"data": J{"type": "token", "id": t["id"], "name": t["name"], "scopes": t["scopes"], "prefix": t["prefix"], "project_id": t["project_id"], "project_name": t["project_name"]}}}
+			}
+		}
+		for _, t := range f.Tokens {
+			if r.Authorization == "Bearer "+t {
+				return &Reply{Status: 200, Body: J{"data": J{"type": "token", "id": 1, "name": "agent", "scopes": []any{"issues:read", "issues:write"}, "prefix": t[:10], "project_id": nil, "project_name": nil}}}
+			}
+		}
+	}
 	if r.Authorization != "Bearer "+f.Token {
 		return &Reply{Status: 403, Body: J{"error": "forbidden"}}
 	}
@@ -651,10 +672,22 @@ func (f *FakeAPI) tokens(r *Request) *Reply {
 				return invalid("scopes")
 			}
 		}
+		var projectID, projectName any
+		if ref, ok := input["project"]; ok {
+			s := fmt.Sprint(ref)
+			if !projectRef.MatchString(s) {
+				return invalid("project")
+			}
+			p := f.FindProject(s)
+			if p == nil {
+				return notFound("project_not_found")
+			}
+			projectID, projectName = p["id"], p["name"]
+		}
 		id := len(f.APITokens) + 1
 		token := fmt.Sprintf("ck_test_created_token_%027d", id)
 		record := J{"id": id, "name": name, "scopes": list, "prefix": token[:10], "created_at": "2026-10-10T12:00:00.000Z",
-			"created_by": "admin", "last_used_at": nil, "revoked_at": nil, "project_id": nil, "project_name": nil, "token": token}
+			"created_by": "admin", "last_used_at": nil, "revoked_at": nil, "project_id": projectID, "project_name": projectName, "token": token}
 		f.APITokens = append(f.APITokens, record)
 		return &Reply{Status: 201, Body: J{"data": record}}
 	case r.Method == "GET" && r.Path == "/v1/tokens":
