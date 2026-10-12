@@ -1,6 +1,9 @@
 # Runs when a maintainer pushes a version tag (vX.Y.Z). Agents never push tags.
-# It builds the binaries with GoReleaser (checksums, SBOMs, provenance), publishes the npm
-# wrapper with the checksums of this release, and makes the Homebrew formula for the tap.
+# It builds the binaries with GoReleaser (checksums, SBOMs, provenance) into a draft release,
+# signs checksums.txt in the environment "release" (a maintainer approves the job; the key is a
+# secret of that environment only), checks the signature with the keys of install.sh, publishes
+# the release, then the npm wrapper with the checksums and their signature, and makes the
+# Homebrew formula for the tap.
 name: Release
 
 on:
@@ -43,9 +46,58 @@ jobs:
           name: checksums
           path: dist/checksums.txt
 
+  sign:
+    name: Sign checksums.txt
+    needs: binaries
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: release
+    permissions:
+      contents: write # upload the signature, then publish the draft release
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: checksums
+      - name: Sign
+        env:
+          SIGNING_KEY: ${{ secrets.CLI_RELEASE_SIGNING_KEY }}
+        run: |
+          set +x
+          [ -n "$SIGNING_KEY" ] || { echo "The secret CLI_RELEASE_SIGNING_KEY of the environment release is missing."; exit 1; }
+          umask 077
+          printf '%s\n' "$SIGNING_KEY" > "$RUNNER_TEMP/cli-release-key"
+          ssh-keygen -Y sign -q -f "$RUNNER_TEMP/cli-release-key" -n checkend-cli-release checksums.txt
+      - name: Remove the key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/cli-release-key"
+      - name: Check the signature with the keys of install.sh
+        run: |
+          sed -n '/^# BEGIN ALLOWED SIGNERS$/,/^# END ALLOWED SIGNERS$/p' install.sh > "$RUNNER_TEMP/allowed_signers"
+          awk '$1 != "" && $1 !~ /^#/ { print $1 }' "$RUNNER_TEMP/allowed_signers" > "$RUNNER_TEMP/principals"
+          ok=
+          while read -r principal; do
+            if ssh-keygen -Y verify -f "$RUNNER_TEMP/allowed_signers" -I "$principal" -n checkend-cli-release \
+              -s checksums.txt.sig < checksums.txt; then ok=1; break; fi
+          done < "$RUNNER_TEMP/principals"
+          [ -n "$ok" ] || { echo "The signature does not verify with a key of install.sh: add the public key first."; exit 1; }
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: signature
+          path: checksums.txt.sig
+      - name: Upload the signature and publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release upload "$TAG" checksums.txt.sig --repo "$GITHUB_REPOSITORY"
+          gh release edit "$TAG" --draft=false --repo "$GITHUB_REPOSITORY"
+
   npm:
     name: npm wrapper (@checkend/cli)
-    needs: binaries
+    needs: sign
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -63,6 +115,10 @@ jobs:
         with:
           name: checksums
           path: npm
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: signature
+          path: npm
       - name: Publish
         working-directory: npm
         env:
@@ -76,7 +132,7 @@ jobs:
 
   homebrew:
     name: Homebrew formula
-    needs: binaries
+    needs: sign
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

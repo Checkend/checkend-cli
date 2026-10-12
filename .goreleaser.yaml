@@ -51,10 +51,14 @@ release:
     owner: Checkend
     name: checkend-cli
   prerelease: auto
+  # A draft: the sign job of the release workflow uploads checksums.txt.sig, then publishes it.
+  draft: true
   footer: |
     Install: `brew install checkend/tap/checkend`, `npx @checkend/cli`, or
     `curl -fsSL https://raw.githubusercontent.com/Checkend/checkend-cli/main/install.sh | sh`.
-    Check a download with checksums.txt (SHA-256).
+    checksums.txt (SHA-256) is signed: checksums.txt.sig. Check it with the allowed signers of
+    install.sh: `ssh-keygen -Y verify -f allowed_signers -I <key id> -n checkend-cli-release
+    -s checksums.txt.sig < checksums.txt`.
 
 changelog:
   use: git
