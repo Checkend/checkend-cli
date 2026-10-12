@@ -67,6 +67,13 @@ The first release. Nothing is tagged or published yet. Until then, build `ce` fr
   hidden prompt. `--key` still works in this release and prints a warning. The MCP commands
   that `ce setup` and `ce mcp --help` print name the absolute path of ce when `ce` on PATH is
   another binary or none.
+- `ce token create --scope … [--name …]` creates an API token (POST /v1/tokens, admin scope) and
+  prints only the token to stdout, also when stdout is not a terminal, so that it can go into
+  `gh secret set`; with `--json`, stdout is `{"token", …}`. It does not print to a terminal
+  without `--show`. On a hosted space it says that an owner makes tokens in Settings → Tokens.
+  `ce token list` and `ce token revoke <id>` list and revoke tokens.
+- `ce deploy --dry-run` prints the request that it would send and sends nothing. It cannot check
+  the scope of the token (the API has no way to do that without a request) and says so.
 - Every error ends with a link to the docs section that explains it; JSON errors have `"docs"`
   next to `"error"` and `"hint"`.
 - Install methods for the first release: Homebrew, `install.sh` and the npm wrapper

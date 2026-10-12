@@ -25,6 +25,7 @@ const (
 	Operations       Topic = "operations"
 	Authentication   Topic = "api#authentication"
 	Scopes           Topic = "api#scopes"
+	Tokens           Topic = "api#tokens"
 	APIErrors        Topic = "api#errors"
 	Projects         Topic = "api#projects"
 	Issues           Topic = "api#issues"
@@ -46,7 +47,7 @@ const (
 // All are all the topics, for the tests.
 var All = []Topic{
 	QuickStart, SelfHost, SelfHostDocker, SelfHostServer, SelfHostProxy, DeployCloudflare,
-	Backup, Upgrade, CheckInstall, Operations, Authentication, Scopes, APIErrors, Projects, Issues,
+	Backup, Upgrade, CheckInstall, Operations, Authentication, Scopes, Tokens, APIErrors, Projects, Issues,
 	Deploys, Settings, PublicURL, Health, BackPressure, RequestLimits, SendingErrors, AgentSetup,
 	SetupKey, ConnectAgent, MCP, SourceMaps, SourceMapStorage,
 }

@@ -47,6 +47,8 @@ type FakeAPI struct {
 	// SetupKey opens the /v1/setup routes. Tokens are more valid API tokens (agent tokens).
 	SetupKey string
 	Tokens   []string
+	// APITokens are the tokens of POST /v1/tokens (with "token"; the list never shows it).
+	APITokens []J
 	// AgentApps is the app (public project ID) of each agent token.
 	AgentApps  map[string]string
 	SetupMD    string
@@ -333,6 +335,9 @@ func (f *FakeAPI) route(r *Request) *Reply {
 	if !f.validToken(r.Authorization) {
 		return &Reply{Status: 401, Body: J{"error": "unauthorized"}}
 	}
+	if strings.HasPrefix(r.Path, "/v1/tokens") {
+		return f.tokens(r)
+	}
 	switch {
 	case r.Method == "GET" && r.Path == "/v1/projects":
 		return &Reply{Status: 200, Body: J{"data": f.Projects}}
@@ -606,6 +611,9 @@ func (f *FakeAPI) mcp(r *Request) *Reply {
 	if !f.validToken(r.Authorization) {
 		return &Reply{Status: 401, Body: J{"error": "unauthorized"}}
 	}
+	if strings.HasPrefix(r.Path, "/v1/tokens") {
+		return f.tokens(r)
+	}
 	msg, _ := r.Body.(J)
 	if _, ok := msg["id"]; !ok {
 		return &Reply{Status: 202}
@@ -619,4 +627,56 @@ func IngestURL(dsn *url.URL, endpoint string) string {
 	path := strings.TrimSuffix(dsn.Path, "/")
 	i := strings.LastIndex(path, "/")
 	return dsn.Scheme + "://" + dsn.Host + path[:i] + "/api/" + path[i+1:] + "/" + endpoint + "/"
+}
+
+// tokens are the /v1/tokens routes: they need the admin scope (only f.Token has it here).
+func (f *FakeAPI) tokens(r *Request) *Reply {
+	if r.Authorization != "Bearer "+f.Token {
+		return &Reply{Status: 403, Body: J{"error": "forbidden"}}
+	}
+	scopes := map[string]bool{"issues:read": true, "issues:write": true, "releases:write": true, "admin": true}
+	switch {
+	case r.Method == "POST" && r.Path == "/v1/tokens":
+		input, _ := r.Body.(J)
+		name, _ := input["name"].(string)
+		list, _ := input["scopes"].([]any)
+		if name == "" || len(name) > 100 {
+			return invalid("name")
+		}
+		if len(list) == 0 {
+			return invalid("scopes")
+		}
+		for _, sc := range list {
+			if v, _ := sc.(string); !scopes[v] {
+				return invalid("scopes")
+			}
+		}
+		id := len(f.APITokens) + 1
+		token := fmt.Sprintf("ck_test_created_token_%027d", id)
+		record := J{"id": id, "name": name, "scopes": list, "prefix": token[:10], "created_at": "2026-10-10T12:00:00.000Z",
+			"created_by": "admin", "last_used_at": nil, "revoked_at": nil, "project_id": nil, "project_name": nil, "token": token}
+		f.APITokens = append(f.APITokens, record)
+		return &Reply{Status: 201, Body: J{"data": record}}
+	case r.Method == "GET" && r.Path == "/v1/tokens":
+		out := []any{}
+		for _, t := range f.APITokens {
+			c := J{}
+			for k, v := range t {
+				if k != "token" {
+					c[k] = v
+				}
+			}
+			out = append(out, c)
+		}
+		return &Reply{Status: 200, Body: J{"data": out}}
+	case r.Method == "DELETE" && strings.HasPrefix(r.Path, "/v1/tokens/"):
+		for _, t := range f.APITokens {
+			if fmt.Sprint(t["id"]) == strings.TrimPrefix(r.Path, "/v1/tokens/") && t["revoked_at"] == nil {
+				t["revoked_at"] = "2026-10-10T12:00:00.000Z"
+				return &Reply{Status: 204}
+			}
+		}
+		return notFound("not_found")
+	}
+	return notFound("not_found")
 }

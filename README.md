@@ -110,7 +110,7 @@ claude mcp add checkend -- ce mcp --url https://checkend.example.com
 | `ce setup --url <url> --key-stdin` | Connect the repo with a setup key from stdin (for coding agents; see above) |
 | `ce setup report sdk_installed` | Report a setup step |
 | `ce mcp [--url <url>]` | A stdio MCP server for agents, with the agent token of `ce setup` (or `CHECKEND_AGENT_TOKEN`) |
-| `ce deploy [--release <v>] [--environment <name>] [--commit <sha>] [--commits-since <sha>]` | Report a deploy from CI (default commit: git HEAD) |
+| `ce deploy [--release <v>] [--environment <name>] [--commit <sha>] [--commits-since <sha>] [--dry-run]` | Report a deploy from CI (default commit: git HEAD); `--dry-run` prints the request and sends nothing |
 | `ce sourcemaps upload --release <v> [--url-prefix <p>] <dir\|file.map>...` | Build the index of each source map locally and upload it |
 | `ce dsn rotate [--revoke-old [--yes]]` | Make a new DSN key; then revoke the old keys |
 | `ce migrate-from-sentry` | Find the Sentry setup of the repo and get a Checkend DSN for it |
@@ -121,6 +121,8 @@ claude mcp add checkend -- ce mcp --url https://checkend.example.com
 | `ce server backup [--output <file>]` | Back up its database (Cloudflare: a D1 Time Travel bookmark) |
 | `ce server status` | Its version, health, and whether a newer release exists |
 | `ce server uninstall [--delete-data]` | Remove it; the data stays unless `--delete-data` |
+| `ce token create --scope <scope>... [--name <n>] [--show]` | Create an API token; only the token goes to stdout (pipe it to `gh secret set`) |
+| `ce token list` / `ce token revoke <id> [--yes]` | List the tokens (never the tokens themselves); revoke one |
 | `ce update [--yes]` | Update ce itself (Homebrew, npm, the install script or go install) |
 
 `ce server` is for a Checkend server that you run yourself; a hosted space updates itself. The

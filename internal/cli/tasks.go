@@ -59,7 +59,7 @@ func deployCommand() *Command {
 	return &Command{
 		Path:    []string{"deploy"},
 		Summary: "Report a deploy (in CI), so that Checkend can verify fixes",
-		Usage:   "[--release <v>] [--environment <name>] [--commit <sha>] [--commits-since <sha>] [--pr <url>]... [--project <id|slug>]",
+		Usage:   "[--release <v>] [--environment <name>] [--commit <sha>] [--commits-since <sha>] [--pr <url>]... [--project <id|slug>] [--dry-run]",
 		Details: []string{
 			"  --release <version>    The release of the SDK (default: the commit)",
 			"  --environment <name>   Default: production (--env is a short form)",
@@ -67,11 +67,13 @@ func deployCommand() *Command {
 			"  --commits-since <sha>  Add the commits since the last deploy (git rev-list <sha>..HEAD)",
 			"  --pr <url>             A pull request in the deploy (more than one is OK)",
 			"  --project <id|slug>    Default: the project in .checkend.json",
+			"  --dry-run              Print what it would send; send and record nothing",
 			"",
-			"Needs a token with the releases:write scope, for example in CHECKEND_TOKEN.",
+			"Needs a token with the releases:write scope, for example in CHECKEND_TOKEN",
+			"(make one with `ce token create --scope releases:write`).",
 		},
 		Options: map[string]Kind{"release": String, "environment": String, "env": String, "commit": String,
-			"commits-since": String, "pr": List, "project": String},
+			"commits-since": String, "pr": List, "project": String, "dry-run": Bool},
 		Run: func(s *Session) error {
 			ref, err := requireProject(s)
 			if err != nil {
@@ -111,6 +113,9 @@ func deployCommand() *Command {
 			client, err := s.API()
 			if err != nil {
 				return err
+			}
+			if s.Bool("dry-run") {
+				return dryRun(s, client.URL, body)
 			}
 			raw, err := client.Post("/v1/deploys", body)
 			if raw, err = projectNotFound(raw, err, ref); err != nil {

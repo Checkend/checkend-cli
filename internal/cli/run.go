@@ -28,7 +28,7 @@ var globalOptions = map[string]Kind{
 func commands() []*Command {
 	list := slices.Concat(authCommands(), setupCommands(), []*Command{mcpCommand(), initCommand(), nextCommand(), deployCommand(), migrateCommand()},
 		issueCommands(), eventCommands(), projectCommands(), []*Command{dsnRotateCommand(), sourcemapsUploadCommand()},
-		installCommands(), serverCommands(), []*Command{updateCommand()})
+		tokenCommands(), installCommands(), serverCommands(), []*Command{updateCommand()})
 	for _, c := range list {
 		if c.Docs == "" {
 			c.Docs = commandDocs[c.Path[0]]
@@ -46,7 +46,7 @@ var commandDocs = map[string]docs.Topic{
 	"setup": docs.AgentSetup, "mcp": docs.MCP, "init": docs.Projects, "next": docs.Issues,
 	"deploy": docs.Deploys, "migrate-from-sentry": docs.SendingErrors, "issue": docs.Issues,
 	"event": docs.Issues, "project": docs.Projects, "dsn": docs.Projects, "sourcemaps": docs.SourceMaps,
-	"server": docs.SelfHost, "update": docs.ConnectAgent,
+	"server": docs.SelfHost, "token": docs.Tokens, "update": docs.ConnectAgent,
 }
 
 // oldNames are the names of the server commands before `ce server`: they work for one more
@@ -75,6 +75,7 @@ var groups = map[string]string{
 	"dsn":        "Rotate the DSN of a project",
 	"sourcemaps": "Upload source maps",
 	"server":     "Run your own Checkend server: install, upgrade, back up, status, uninstall",
+	"token":      "Create, list and revoke API tokens (for CI and agents)",
 }
 
 // Run runs `ce argv...` and returns the exit code.

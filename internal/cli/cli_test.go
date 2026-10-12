@@ -29,7 +29,7 @@ func TestHelpListsOnlyTheCommandsThatExist(t *testing.T) {
 		Contains(t, r.Stdout, c)
 	}
 	section := commandsSection(r.Stdout)
-	for _, later := range []string{"brief", "claim", "note", "fix", "release", "token", "resolve"} {
+	for _, later := range []string{"brief", "claim", "note", "fix", "release", "resolve"} {
 		NotMatches(t, section, `(?m)^\s+`+later+`\b`)
 	}
 }
@@ -74,7 +74,7 @@ func TestATypoNeverDoesAnything(t *testing.T) {
 		{"init", "--project"}, {"issue", "frob"}, {"issue"}, {"issue", "list", "--bogus"},
 		{"issue", "list", "extra"}, {"issue", "view"}, {"issue", "view", "abc"},
 		{"issue", "view", "1", "2"}, {"event", "view", "1.5"}, {"next", "1"}, {"status", "extra"},
-		{"project", "create"}, {"login", "--url"}, {"--json"}, {"brief", "1"}, {"token", "list"},
+		{"project", "create"}, {"login", "--url"}, {"--json"}, {"brief", "1"}, {"token", "list", "extra"}, {"token", "create", "--scope"},
 		{"issue", "list", "--json=yes"}, {"issue", "list", "--limit", "--json"}, {"issue", "list", "-x"},
 		{"login", "--with-token=1"},
 		{"deploy", "extra"}, {"deploy", "--pr"}, {"dsn"}, {"dsn", "frob"}, {"dsn", "rotate", "x"},

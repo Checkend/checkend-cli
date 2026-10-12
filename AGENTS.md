@@ -54,7 +54,9 @@ install.sh          The install script (macOS and Linux).
 3. **Command pattern `ce <thing> <action>`**, plus top-level shortcuts for the fix loop
    (`next`). Names match the API and the MCP tools.
 4. **Output modes.** Terminal: short tables and cards. Not a terminal or `--json`: the API JSON,
-   unchanged in shape and key order. Errors on stderr; in JSON mode `{"error", "hint", "docs"}`.
+   unchanged in shape and key order. One exception: `ce token create` prints only the token unless
+   `--json` is given, because its stdout goes into a pipe such as `gh secret set`. Errors on
+   stderr; in JSON mode `{"error", "hint", "docs"}`.
    Each error says what happened, gives the next step, and links to the docs: give it a topic of
    `internal/docs` with `WithDocs()`, or it gets the topic of its command. Add new topics only to
    the table in `internal/docs/docs.go`, and run `CE_DOCS_LIVE=1 go test ./internal/docs/`.
