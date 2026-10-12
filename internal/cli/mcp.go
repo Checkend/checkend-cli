@@ -26,7 +26,7 @@ func mcpCommand() *Command {
 			"A stdio MCP server for agents: it sends each JSON-RPC message to <url>/mcp with the",
 			"agent token of `ce setup` (or CHECKEND_AGENT_TOKEN), never the login of a person.",
 			"Add it to an agent, for example:",
-			"  claude mcp add checkend -- ce mcp --url <url>",
+			"  claude mcp add checkend -- {ce} mcp --url <url>",
 		},
 		Run: func(s *Session) error {
 			if s.Has("token") {
@@ -42,7 +42,7 @@ func mcpCommand() *Command {
 			}
 			if token == "" {
 				return clierr.New(clierr.Auth, fmt.Sprintf("No agent token for %s.", url),
-					fmt.Sprintf("Run `ce setup --url %s --key <cks_…>` in the repo of the app.", url))
+					fmt.Sprintf("Run `ce setup --url %s --key-stdin` in the repo of the app, and pipe the setup key.", url))
 			}
 			client := api.New(s.Host, url, token)
 			reader := bufio.NewReaderSize(s.Host.Stdin, 64<<10)
@@ -108,7 +108,7 @@ func forward(s *Session, client *api.Client, line []byte, warned bool) bool {
 	case status == 401 || status == 403:
 		write(rpcError(head.ID, -32001, fmt.Sprintf("%s rejected the token.", client.URL)))
 		if !warned {
-			s.Out.Notice(fmt.Sprintf("ce mcp: %s rejected the agent token. Run `ce setup --url %s --key <cks_…>` again.", client.URL, client.URL))
+			s.Out.Notice(fmt.Sprintf("ce mcp: %s rejected the agent token. Run `ce setup --url %s --key-stdin` again with a new setup key.", client.URL, client.URL))
 			warned = true
 		}
 	case status < 200 || status >= 300:

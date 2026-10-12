@@ -224,7 +224,8 @@ func runCommand(command *Command, rest []string, h *host.Host, out *output.Outpu
 		return clierr.UsageError(sanitize.OneLine(err.Error()), helpHint(command))
 	}
 	if p.bools["help"] {
-		out.Write(commandHelp(command))
+		ce, _ := ceCommand(h)
+		out.Write(strings.ReplaceAll(commandHelp(command), "{ce}", ce))
 		return nil
 	}
 	required := 0

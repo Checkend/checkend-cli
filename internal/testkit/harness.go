@@ -85,6 +85,8 @@ type Harness struct {
 	// Executable is the path of ce for `ce update`; CLIReleaseAPI fakes its releases.
 	Executable    string
 	CLIReleaseAPI string
+	// CEOnPath is the `ce` that PATH finds ("": none).
+	CEOnPath string
 	// Cloudflare is the fake of the Cloudflare API (nil: none).
 	Cloudflare *FakeCloudflare
 }
@@ -171,6 +173,12 @@ func (h *Harness) Run(argv []string, opts ...Options) Result {
 		},
 	}
 	hst.Executable, hst.CLIReleaseAPI = h.Executable, h.CLIReleaseAPI
+	hst.LookPath = func(file string) (string, error) {
+		if file == "ce" && h.CEOnPath != "" {
+			return h.CEOnPath, nil
+		}
+		return "", fmt.Errorf("%s: not found", file)
+	}
 	if h.Cloudflare != nil {
 		hst.CloudflareAPI = h.Cloudflare.URL
 	}

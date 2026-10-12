@@ -10,6 +10,7 @@ import (
 	"github.com/Checkend/checkend-cli/internal/api"
 	"github.com/Checkend/checkend-cli/internal/clierr"
 	"github.com/Checkend/checkend-cli/internal/config"
+	"github.com/Checkend/checkend-cli/internal/host"
 	"github.com/Checkend/checkend-cli/internal/jv"
 	"github.com/Checkend/checkend-cli/internal/snippets"
 	"github.com/Checkend/checkend-cli/internal/urlcheck"
@@ -24,12 +25,46 @@ const newKeyHint = "Ask the user for a new setup key: \"Copy prompt\" in Checken
 
 func setupCommands() []*Command { return []*Command{setupCommand(), setupReportCommand()} }
 
-// setupKey returns the setup key from --key or CHECKEND_SETUP_KEY, checked, and hides it.
+// setupKey returns the setup key from --key-stdin (one line of stdin), --key (deprecated: it is
+// in the shell history and in `ps`) or CHECKEND_SETUP_KEY, checked, and hides it. "" when none.
 func setupKey(s *Session) (string, error) {
 	key := s.String("key")
+	if s.Bool("key-stdin") {
+		if key != "" {
+			return "", clierr.UsageError("Give the setup key once: --key-stdin or --key.", "Pipe it: printf '%s\n' \"$KEY\" | ce setup --url <url> --key-stdin")
+		}
+		input, err := s.Host.ReadStdin()
+		if err != nil {
+			return "", err
+		}
+		key, _, _ = strings.Cut(input, "\n")
+		key = strings.TrimSpace(key)
+		if key == "" {
+			return "", clierr.UsageError("--key-stdin read no setup key from stdin.", "Pipe the key: printf '%s\n' \"$KEY\" | ce setup --url <url> --key-stdin")
+		}
+	} else if key != "" {
+		s.Out.Notice("Warning: --key puts the setup key in your shell history and in `ps`. Pipe it to --key-stdin instead; --key goes away in the next release.")
+	}
 	if key == "" {
 		key = s.Host.Getenv("CHECKEND_SETUP_KEY")
 	}
+	s.Out.Hide(key)
+	if key != "" && !setupKeyPattern.MatchString(key) {
+		return "", clierr.UsageError("The setup key is not valid: it starts with cks_.", newKeyHint)
+	}
+	return key, nil
+}
+
+// promptKey asks for the setup key with a hidden prompt on a terminal ("" without a terminal).
+func promptKey(s *Session) (string, error) {
+	if !s.Host.Interactive {
+		return "", nil
+	}
+	key, err := s.Host.Prompt("Setup key: ", true)
+	if err != nil {
+		return "", err
+	}
+	key = strings.TrimSpace(key)
 	s.Out.Hide(key)
 	if key != "" && !setupKeyPattern.MatchString(key) {
 		return "", clierr.UsageError("The setup key is not valid: it starts with cks_.", newKeyHint)
@@ -70,23 +105,47 @@ type setupResult struct {
 	Steps     string            `json:"steps"`
 }
 
-func mcpCommands(url string) map[string]string {
+func mcpCommands(h *host.Host, url string) map[string]string {
+	ce, path := ceCommand(h)
 	return map[string]string{
 		"server":      url + "/mcp",
-		"claude_code": "claude mcp add checkend -- ce mcp --url " + url,
-		"codex":       "codex mcp add checkend -- ce mcp --url " + url,
-		"cursor":      fmt.Sprintf(`{"mcpServers":{"checkend":{"command":"ce","args":["mcp","--url",%q]}}}`, url),
+		"claude_code": "claude mcp add checkend -- " + ce + " mcp --url " + url,
+		"codex":       "codex mcp add checkend -- " + ce + " mcp --url " + url,
+		"cursor":      fmt.Sprintf(`{"mcpServers":{"checkend":{"command":%q,"args":["mcp","--url",%q]}}}`, path, url),
 	}
+}
+
+// ceCommand is how an agent starts this ce: "ce" when `ce` on PATH is this binary, else the
+// absolute path of this binary (for the shell, and as it is).
+func ceCommand(h *host.Host) (shell, path string) {
+	if h.Executable == "" {
+		return "ce", "ce"
+	}
+	self, err := filepath.EvalSymlinks(h.Executable)
+	if err != nil {
+		self = h.Executable
+	}
+	if h.LookPath != nil {
+		if found, err := h.LookPath("ce"); err == nil {
+			if resolved, err := filepath.EvalSymlinks(found); err == nil && resolved == self {
+				return "ce", "ce"
+			}
+		}
+	}
+	return shellQuote(h.Executable), h.Executable
 }
 
 func setupCommand() *Command {
 	return &Command{
 		Path:    []string{"setup"},
 		Summary: "Connect this repo to Checkend with a setup key (for coding agents)",
-		Usage:   "--url <url> --key <cks_…> [--name <name>] [--platform <platform>] [--agent <name>]",
+		Usage:   "--url <url> --key-stdin [--name <name>] [--platform <platform>] [--agent <name>]",
 		Details: []string{
 			"  --url <url>            The Checkend instance",
-			"  --key <cks_…>          The setup key from the prompt (or CHECKEND_SETUP_KEY)",
+			"  --key-stdin            Read the setup key from stdin (one line), for example:",
+			"                           printf '%s\\n' \"$KEY\" | ce setup --url <url> --key-stdin",
+			"                         (or CHECKEND_SETUP_KEY; on a terminal ce asks for it, hidden)",
+			"  --key <cks_…>          Deprecated: the key goes into the shell history and `ps`",
 			"  --name <name>          The app name (default: the repo directory)",
 			"  --platform <platform>  Override the detected stack, for example node-express",
 			"  --agent <name>         The agent, for the token name (default: detected)",
@@ -95,9 +154,9 @@ func setupCommand() *Command {
 			"sends a test event, and prints the MCP commands and the next steps for the agent.",
 			"The setup key and the token are never printed.",
 			"",
-			"Then: ce setup report sdk_installed --key <cks_…>   (after the SDK is installed)",
+			"Then: ce setup report sdk_installed   (after the SDK is installed)",
 		},
-		Options: map[string]Kind{"key": String, "name": String, "platform": String, "agent": String},
+		Options: map[string]Kind{"key": String, "key-stdin": Bool, "name": String, "platform": String, "agent": String},
 		Run: func(s *Session) error {
 			h := s.Host
 			key, err := setupKey(s)
@@ -109,14 +168,19 @@ func setupCommand() *Command {
 				input = h.Getenv("CHECKEND_URL")
 			}
 			if input == "" {
-				return clierr.UsageError("Give the URL of your Checkend instance.", "Run `ce setup --url <url> --key <cks_…>` (both are in the prompt).")
+				return clierr.UsageError("Give the URL of your Checkend instance.", "Run `ce setup --url <url> --key-stdin` and pipe the key (both are in the prompt).")
 			}
 			url, err := urlcheck.Normalize(input)
 			if err != nil {
 				return err
 			}
 			if key == "" {
-				return clierr.UsageError("Give the setup key.", "Run `ce setup --url "+url+" --key <cks_…>` (the key is in the prompt), or set CHECKEND_SETUP_KEY.")
+				if key, err = promptKey(s); err != nil {
+					return err
+				}
+			}
+			if key == "" {
+				return clierr.UsageError("Give the setup key.", "Pipe it (the key is in the prompt): printf '%s\n' \"$KEY\" | ce setup --url "+url+" --key-stdin")
 			}
 			root := config.FindRepoRoot(h.Cwd)
 			if root == "" {
@@ -195,7 +259,7 @@ func setupCommand() *Command {
 				}
 				r.TestEvent = "already_sent"
 			}
-			r.MCP = mcpCommands(url)
+			r.MCP = mcpCommands(h, url)
 			r.StepsURL = url + "/agent/setup.md"
 			if steps, err := client.Text("/agent/setup.md"); err == nil {
 				r.Steps = steps
@@ -260,13 +324,15 @@ func setupReportCommand() *Command {
 	return &Command{
 		Path:    []string{"setup", "report"},
 		Summary: "Report a setup step to Checkend (sdk_installed)",
-		Usage:   "<step> [--key <cks_…>] [--project <id|slug>]",
+		Usage:   "<step> [--key-stdin] [--project <id|slug>]",
 		Details: []string{
 			"  <step>               sdk_installed",
-			"  --key <cks_…>        The setup key (or CHECKEND_SETUP_KEY)",
+			"  --key-stdin          Read the setup key from stdin (or CHECKEND_SETUP_KEY; on a",
+			"                       terminal ce asks for it). Default: the agent token of `ce setup`",
+			"  --key <cks_…>        Deprecated: the key goes into the shell history and `ps`",
 			"  --project <id|slug>  Default: the project in .checkend.json",
 		},
-		Options: map[string]Kind{"key": String, "project": String},
+		Options: map[string]Kind{"key": String, "key-stdin": Bool, "project": String},
 		Args:    []string{"step"},
 		Run: func(s *Session) error {
 			step := s.Args[0]
@@ -295,6 +361,15 @@ func setupReportCommand() *Command {
 				}
 				s.Out.Hide(token)
 			}
+			if token == "" {
+				// No agent token and no login either: ask for the setup key on a terminal.
+				if login, _ := s.Token(url); login == "" {
+					if key, err = promptKey(s); err != nil {
+						return err
+					}
+					token = key
+				}
+			}
 			var client *api.Client
 			if token != "" {
 				client = api.New(s.Host, url, token)
@@ -308,7 +383,7 @@ func setupReportCommand() *Command {
 						return keyError(err)
 					}
 					return clierr.New(clierr.Auth, "This token cannot report setup steps.",
-						fmt.Sprintf("Run `ce setup report %s --key <cks_…>` with the setup key from the prompt.", step))
+						fmt.Sprintf("Run `ce setup report %s --key-stdin` and pipe the setup key from the prompt.", step))
 				}
 				_, err = api.OrNotFound(nil, err, fmt.Sprintf("App %q not found for this key.", ref), "Run `ce setup` first.")
 				return err

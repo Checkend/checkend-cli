@@ -38,6 +38,8 @@ type Host struct {
 	// keys (tests only; a release build leaves them empty).
 	ReleaseAPI  string
 	ReleaseKeys map[string]string
+	// LookPath finds a program on PATH (for the MCP command of `ce setup`).
+	LookPath func(file string) (string, error)
 	// Executable is the path of the running ce, with symlinks resolved (for `ce update`).
 	Executable string
 	// CLIReleaseAPI replaces the GitHub API of the CLI repo (tests only).

@@ -125,6 +125,7 @@ func main() {
 		Run:         run,
 		LookupHost:  net.LookupHost,
 		Executable:  exe,
+		LookPath:    exec.LookPath,
 	}
 	os.Exit(cli.Run(os.Args[1:], h))
 }

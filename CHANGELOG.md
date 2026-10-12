@@ -62,6 +62,11 @@ The first release. Nothing is tagged or published yet. Until then, build `ce` fr
 - `ce update` updates ce itself: it finds the install method (Homebrew, npm, the install script
   or go install) and runs its update after a confirmation, or prints the commands. Until a ce
   release exists, it says so and prints the `go install` command.
+- `ce setup --key-stdin` and `ce setup report --key-stdin` read the setup key from stdin, so it
+  stays out of the shell history and `ps`. Without a key on a terminal, they ask for it with a
+  hidden prompt. `--key` still works in this release and prints a warning. The MCP commands
+  that `ce setup` and `ce mcp --help` print name the absolute path of ce when `ce` on PATH is
+  another binary or none.
 - Every error ends with a link to the docs section that explains it; JSON errors have `"docs"`
   next to `"error"` and `"hint"`.
 - Install methods for the first release: Homebrew, `install.sh` and the npm wrapper

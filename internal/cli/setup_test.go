@@ -146,7 +146,7 @@ func TestSetupInputErrorsDoNothing(t *testing.T) {
 func TestSetupWithAnOldKeyExits5WithTheNextStep(t *testing.T) {
 	api, cli, _ := setup(t)
 	api.SetupKey = fakeSetupKey("other")
-	r := cli.Run([]string{"setup", "--url", api.URL, "--key", "cks_test_expired_key_0123456789abcd"})
+	r := cli.Run([]string{"setup", "--url", api.URL, "--key-stdin"}, Options{Stdin: "cks_test_expired_key_0123456789abcd\n"})
 	Code(t, r, 5)
 	Contains(t, r.ErrJSON(t)["hint"].(string), "new setup key")
 	if Exists(filepath.Join(cli.Repo, ".checkend.json")) {
@@ -162,7 +162,7 @@ func TestSetupReportsTheAppLimit(t *testing.T) {
 		}
 		return nil
 	}
-	r := cli.Run(setupArgs(api))
+	r := cli.Run([]string{"setup", "--url", api.URL, "--key-stdin"}, Options{Stdin: api.SetupKey})
 	Code(t, r, 1)
 	Contains(t, r.ErrJSON(t)["error"].(string), "maximum of apps")
 }

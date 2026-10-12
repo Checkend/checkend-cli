@@ -37,11 +37,15 @@ ce --version
 ## Set up with a coding agent
 
 In Checkend, "Copy prompt" gives a prompt for Claude Code, Codex or Cursor with a setup key
-(`cks_…`, valid for 1 hour). The agent runs:
+(`cks_…`, valid for 1 hour). The agent pipes the key to `ce setup`, so that it stays out of the
+shell history and `ps`:
 
 ```sh
-ce setup --url https://checkend.example.com --key cks_…
+printf '%s\n' "$CHECKEND_SETUP_KEY" | ce setup --url https://checkend.example.com --key-stdin
 ```
+
+On a terminal without a key, `ce setup` asks for it with a hidden prompt. `--key cks_…` still
+works in this release, with a warning.
 
 `ce setup` registers the app, writes `.checkend.json`, saves an agent token for the app in the OS
 keychain, sends a test event, and prints the MCP command and the code changes for the agent. The
@@ -103,7 +107,7 @@ claude mcp add checkend -- ce mcp --url https://checkend.example.com
 | `ce project create --name <name> [--platform <p>]` | Create a project and print its DSN |
 | `ce project dsn [<id\|slug>]` | The DSN of a project (default: the linked project) |
 | `ce project delete <id\|slug> [--yes]` | Delete a project and its data. Asks for the name on a terminal; `--yes` in CI |
-| `ce setup --url <url> --key <cks_…>` | Connect the repo with a setup key (for coding agents; see above) |
+| `ce setup --url <url> --key-stdin` | Connect the repo with a setup key from stdin (for coding agents; see above) |
 | `ce setup report sdk_installed` | Report a setup step |
 | `ce mcp [--url <url>]` | A stdio MCP server for agents, with the agent token of `ce setup` (or `CHECKEND_AGENT_TOKEN`) |
 | `ce deploy [--release <v>] [--environment <name>] [--commit <sha>] [--commits-since <sha>]` | Report a deploy from CI (default commit: git HEAD) |
