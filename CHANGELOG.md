@@ -7,8 +7,9 @@ public interface.
 
 ## [Unreleased]
 
-The first release. Nothing is tagged or published yet. Until then, build `ce` from source:
-`go install github.com/Checkend/checkend-cli/cmd/ce@latest`.
+## [0.3.0] - 2026-10-12
+
+The first release.
 
 ### Added
 
@@ -79,7 +80,7 @@ The first release. Nothing is tagged or published yet. Until then, build `ce` fr
   endpoint, it says that the scope check is not available and goes on.
 - Every error ends with a link to the docs section that explains it; JSON errors have `"docs"`
   next to `"error"` and `"hint"`.
-- Install methods for the first release: Homebrew, `install.sh` and the npm wrapper
+- Install methods: Homebrew, `install.sh` and the npm wrapper
   `@checkend/cli`. `install.sh` and the npm wrapper first check the SSH signature of
   `checksums.txt` (a Checkend release key, namespace `checkend-cli-release`), then the SHA-256 of
   the binary; without a valid signature they install nothing. Homebrew checks the SHA-256 of

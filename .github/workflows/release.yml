@@ -23,6 +23,12 @@ jobs:
       id-token: write # provenance attestations
       attestations: write
     steps:
+      # Stop before anything is built or published when a later job would fail for a secret.
+      - name: Check the secrets of the release
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          [ -n "$NPM_TOKEN" ] || { echo "The repo secret NPM_TOKEN is missing: the npm job would fail after the release is published."; exit 1; }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0

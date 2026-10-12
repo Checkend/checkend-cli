@@ -14,8 +14,7 @@ a script, a pipe), or with `--json`, it prints the API JSON.
 
 ## Install
 
-`ce` is one binary for macOS, Linux and Windows. From the first release, install it with one
-of these:
+`ce` is one binary for macOS, Linux and Windows. Install it with one of these:
 
 ```sh
 brew install checkend/tap/checkend
@@ -27,7 +26,7 @@ npx @checkend/cli --version
 Checkend release key, namespace `checkend-cli-release`), then the SHA-256 of the binary. Without
 a valid signature they install nothing. `install.sh` needs `ssh-keygen` from OpenSSH 8.1 or later
 (macOS and current Linux have it). See [SECURITY.md](SECURITY.md) to check a download by hand.
-Until the first release, build it from source (Go 1.26 or later):
+Or build it from source (Go 1.26 or later):
 
 ```sh
 go install github.com/Checkend/checkend-cli/cmd/ce@latest
