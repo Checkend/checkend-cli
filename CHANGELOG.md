@@ -7,6 +7,12 @@ public interface.
 
 ## [Unreleased]
 
+### Added
+
+- `issues`, `projects` and `events` work as `issue`, `project` and `event`, and `show` as `view`
+  (for example `ce issues show 3`). They are synonyms: no hint, and not in the help.
+- An unknown command or subcommand suggests the nearest one: "Did you mean `ce issue view`?"
+
 ### Changed
 
 - The release workflow publishes `@checkend/cli` with npm trusted publishing (OIDC from GitHub

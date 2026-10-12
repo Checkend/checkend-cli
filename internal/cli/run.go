@@ -4,6 +4,7 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
@@ -126,6 +127,7 @@ func dispatch(argv []string, h *host.Host, out *output.Output) error {
 		return clierr.UsageError("Give a command before the options.").WithDocs(docs.QuickStart)
 	}
 	all := commands()
+	argv = withSynonyms(all, argv)
 	// The command with the longest path that starts argv: `ce server install docker`, `ce setup`.
 	var command *Command
 	for _, c := range all {
@@ -140,7 +142,11 @@ func dispatch(argv []string, h *host.Host, out *output.Output) error {
 	}
 	if command == nil || depth > len(command.Path) {
 		if depth == 0 {
-			return clierr.UsageError(fmt.Sprintf("Unknown command %q.", sanitize.OneLine(first))).WithDocs(docs.QuickStart)
+			hint := "Run `ce --help` to see the commands."
+			if near := nearest(all, nil, first); near != "" {
+				hint = fmt.Sprintf("Did you mean `ce %s`? %s", near, hint)
+			}
+			return clierr.UsageError(fmt.Sprintf("Unknown command %q.", sanitize.OneLine(first)), hint).WithDocs(docs.QuickStart)
 		}
 		prefix := argv[:depth]
 		group := groupOf(all, prefix)
@@ -152,8 +158,12 @@ func dispatch(argv []string, h *host.Host, out *output.Output) error {
 			out.Write(groupHelp(prefix, group))
 			return nil
 		}
+		hint := fmt.Sprintf("Run `ce %s --help`.", strings.Join(prefix, " "))
+		if near := nearest(all, prefix, argv[depth]); near != "" {
+			hint = fmt.Sprintf("Did you mean `ce %s %s`? %s", strings.Join(prefix, " "), near, hint)
+		}
 		return clierr.UsageError(fmt.Sprintf("Unknown command %q.", "ce "+strings.Join(prefix, " ")+" "+sanitize.OneLine(argv[depth])),
-			fmt.Sprintf("Run `ce %s --help`.", strings.Join(prefix, " "))).WithDocs(groupDocs(prefix, topic))
+			hint).WithDocs(groupDocs(prefix, topic))
 	}
 	return withDocs(runCommand(command, argv[len(command.Path):], h, out), command.Docs)
 }
@@ -312,4 +322,81 @@ func commandHelp(c *Command) string {
 		details = "\n\nOptions:\n" + strings.Join(c.Details, "\n")
 	}
 	return fmt.Sprintf("%s\n\nUsage: %s%s\n", c.Summary, strings.TrimRight(name(c)+" "+c.Usage, " "), details)
+}
+
+// synonyms are other words for command words. They work silently and are not in the help.
+var synonyms = map[string]string{"issues": "issue", "projects": "project", "events": "event", "show": "view"}
+
+// startsCommand reports whether words are the start of the path of a command.
+func startsCommand(all []*Command, words []string) bool {
+	for _, c := range all {
+		if len(c.Path) >= len(words) && slices.Equal(c.Path[:len(words)], words) {
+			return true
+		}
+	}
+	return false
+}
+
+// withSynonyms replaces a synonym in the command words of argv, only where the word itself
+// starts no command and the synonym does: `ce issue view show` keeps its argument.
+func withSynonyms(all []*Command, argv []string) []string {
+	out := slices.Clone(argv)
+	for i := 0; i < len(out) && !strings.HasPrefix(out[i], "-"); i++ {
+		if !startsCommand(all, out[:i+1]) {
+			to, ok := synonyms[out[i]]
+			if !ok {
+				break
+			}
+			alt := append(slices.Clone(out[:i]), to)
+			if !startsCommand(all, alt) {
+				break
+			}
+			out[i] = to
+		}
+	}
+	return out
+}
+
+// nearest is the visible command word after prefix that is nearest to word (an edit distance of
+// at most 2), also through a synonym; "" when none is near.
+func nearest(all []*Command, prefix []string, word string) string {
+	candidates := map[string]string{}
+	for _, c := range all {
+		if !c.Hidden && len(c.Path) > len(prefix) && slices.Equal(c.Path[:len(prefix)], prefix) {
+			candidates[c.Path[len(prefix)]] = c.Path[len(prefix)]
+		}
+	}
+	for from, to := range synonyms {
+		if _, ok := candidates[to]; ok {
+			candidates[from] = to
+		}
+	}
+	best, bestDistance := "", 3
+	for _, k := range slices.Sorted(maps.Keys(candidates)) {
+		if d := editDistance(word, k); d < bestDistance && d < len(word) {
+			best, bestDistance = candidates[k], d
+		}
+	}
+	return best
+}
+
+// editDistance is the Levenshtein distance of two words.
+func editDistance(a, b string) int {
+	prev := make([]int, len(b)+1)
+	for j := range prev {
+		prev[j] = j
+	}
+	for i := 1; i <= len(a); i++ {
+		cur := make([]int, len(b)+1)
+		cur[0] = i
+		for j := 1; j <= len(b); j++ {
+			cost := 1
+			if a[i-1] == b[j-1] {
+				cost = 0
+			}
+			cur[j] = min(prev[j]+1, cur[j-1]+1, prev[j-1]+cost)
+		}
+		prev = cur
+	}
+	return prev[len(b)]
 }
