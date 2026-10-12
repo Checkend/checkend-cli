@@ -7,6 +7,8 @@ public interface.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-12
+
 ### Added
 
 - `issues`, `projects` and `events` work as `issue`, `project` and `event`, and `show` as `view`
