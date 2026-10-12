@@ -7,6 +7,11 @@ public interface.
 
 ## [Unreleased]
 
+### Changed
+
+- The release workflow publishes `@checkend/cli` with npm trusted publishing (OIDC from GitHub
+  Actions): no npm token is stored any more.
+
 ## [0.3.1] - 2026-10-12
 
 ### Fixed

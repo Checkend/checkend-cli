@@ -3,7 +3,7 @@
 # signs checksums.txt in the environment "release" (a maintainer approves the job; the key is a
 # secret of that environment only), checks the signature with the keys of install.sh, publishes
 # the release, then the npm wrapper with the checksums and their signature, and makes the
-# Homebrew formula for the tap.
+# Homebrew formula for the tap. npm publishes with trusted publishing (OIDC), without a token.
 name: Release
 
 on:
@@ -23,12 +23,6 @@ jobs:
       id-token: write # provenance attestations
       attestations: write
     steps:
-      # Stop before anything is built or published when a later job would fail for a secret.
-      - name: Check the secrets of the release
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          [ -n "$NPM_TOKEN" ] || { echo "The repo secret NPM_TOKEN is missing: the npm job would fail after the release is published."; exit 1; }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
@@ -106,9 +100,12 @@ jobs:
     needs: sign
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # npm trusted publishing: npmjs.com trusts the OIDC token of this job (repo Checkend/checkend-cli,
+    # workflow release.yml, no environment), so no npm token is stored. Keep this job in this file
+    # and without an environment, or the trusted publisher on npmjs.com no longer matches.
     permissions:
       contents: read
-      id-token: write # npm provenance
+      id-token: write # the OIDC token for npm (publish and provenance)
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -125,16 +122,17 @@ jobs:
         with:
           name: signature
           path: npm
+      # Trusted publishing needs npm 11.5.1 or later; Node 22 ships npm 10.
+      - run: npm install --global npm@11.21.0
       - name: Publish
         working-directory: npm
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           TAG: ${{ github.ref_name }}
         run: |
           cp ../LICENSE .
           npm version "${TAG#v}" --no-git-tag-version
           npm test
-          npm publish --provenance --access public
+          npm publish --access public
 
   homebrew:
     name: Homebrew formula

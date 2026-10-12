@@ -19,6 +19,7 @@ import (
 	"regexp"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -371,4 +372,46 @@ func readLF(t *testing.T, path ...string) []byte {
 		t.Fatal(err)
 	}
 	return []byte(strings.ReplaceAll(string(data), "\r\n", "\n"))
+}
+
+// The npm job publishes with npm trusted publishing (OIDC): no stored token. The connection on
+// npmjs.com names release.yml and no environment, so the job keeps that file and no environment.
+func TestNPMPublishesWithTrustedPublishing(t *testing.T) {
+	workflow := string(readLF(t, ".github", "workflows", "release.yml"))
+	start := strings.Index(workflow, "\n  npm:\n")
+	if start < 0 {
+		t.Fatal("release.yml has no npm job")
+	}
+	job := workflow[start+1:]
+	if end := regexp.MustCompile(`\n  [a-z-]+:\n`).FindStringIndex(job[1:]); end != nil {
+		job = job[:end[0]+1]
+	}
+	for _, want := range []string{"id-token: write", "npm install --global npm@", "npm publish --access public"} {
+		if !strings.Contains(job, want) {
+			t.Errorf("the npm job has no %q", want)
+		}
+	}
+	if m := regexp.MustCompile(`npm install --global npm@(\d+)\.(\d+)\.(\d+)`).FindStringSubmatch(job); m == nil ||
+		serverVersionLess(m[1:], []string{"11", "5", "1"}) {
+		t.Errorf("the npm job needs npm 11.5.1 or later for trusted publishing: %v", m)
+	}
+	if strings.Contains(job, "environment:") {
+		t.Error("the npm job has an environment, but the trusted publisher on npmjs.com names none")
+	}
+	for _, banned := range []string{"NODE_AUTH_TOKEN", "NPM_TOKEN"} {
+		if strings.Contains(workflow, banned) {
+			t.Errorf("release.yml still uses %s", banned)
+		}
+	}
+}
+
+func serverVersionLess(a, b []string) bool {
+	for i := range a {
+		x, _ := strconv.Atoi(a[i])
+		y, _ := strconv.Atoi(b[i])
+		if x != y {
+			return x < y
+		}
+	}
+	return false
 }
