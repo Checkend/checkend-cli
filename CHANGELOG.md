@@ -84,6 +84,9 @@ The first release. Nothing is tagged or published yet. Until then, build `ce` fr
   `checksums.txt` (a Checkend release key, namespace `checkend-cli-release`), then the SHA-256 of
   the binary; without a valid signature they install nothing. Homebrew checks the SHA-256 of
   the formula.
+- The release keys: `cli-2026` (`SHA256:yoR4iXfhZdJ4v5OaLXX+5/rupH9z93AhZGdas6/AP88`) signs the
+  CLI releases, `server-2026` (`SHA256:QMPYElbPG0/hSKTHjqjkeaD9ylozLFgf3BFadqoeAzw`) the server
+  releases. Tests pin each embedded key to its fingerprint.
 
 ### Security
 

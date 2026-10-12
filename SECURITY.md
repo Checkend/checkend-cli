@@ -28,8 +28,12 @@ ssh-keygen -Y verify -f allowed_signers -I <key id> -n checkend-cli-release \
 shasum -a 256 -c checksums.txt --ignore-missing
 ```
 
-`<key id>` is the first word of a key line in `allowed_signers`. The server releases are signed
-with another key, in the namespace `checkend-server-release`.
+`<key id>` is the first word of a key line in `allowed_signers`. The release keys:
+
+| Key ID | Signs | Fingerprint |
+|---|---|---|
+| `cli-2026` | CLI releases (`checkend-cli-release`) | `SHA256:yoR4iXfhZdJ4v5OaLXX+5/rupH9z93AhZGdas6/AP88` |
+| `server-2026` | server releases (`checkend-server-release`) | `SHA256:QMPYElbPG0/hSKTHjqjkeaD9ylozLFgf3BFadqoeAzw` |
 
 ## Scope
 

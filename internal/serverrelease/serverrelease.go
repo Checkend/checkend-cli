@@ -43,7 +43,10 @@ const ImageRepository = "ghcr.io/checkend/checkend"
 // TrustedKeys are the public keys that sign the server releases: key ID to an ed25519 key as
 // `ssh-keygen` prints it ("ssh-ed25519 AAAA…"). A new key is added here before its first
 // release; an old key stays until no supported release uses it.
-var TrustedKeys = map[string]string{}
+var TrustedKeys = map[string]string{
+	// SHA256:QMPYElbPG0/hSKTHjqjkeaD9ylozLFgf3BFadqoeAzw (a test pins it)
+	"server-2026": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPLnE0XiMd0q3TgIYSsvGK3FPZZGVMvE/8DCkNm3y3fy",
+}
 
 // Namespace is the SSH signature namespace of a server release manifest. The manifest is signed
 // with `ssh-keygen -Y sign -n checkend-server-release` (the CLI releases use another namespace

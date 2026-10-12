@@ -18,6 +18,8 @@ dir="${CE_INSTALL_DIR:-$HOME/.local/bin}"
 # server releases use another key.
 allowed_signers=$(cat <<'EOF'
 # BEGIN ALLOWED SIGNERS
+# cli-2026: SHA256:yoR4iXfhZdJ4v5OaLXX+5/rupH9z93AhZGdas6/AP88
+cli-2026 namespaces="checkend-cli-release" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAION9vmE2Vp0SRkz+rdN0fnC9IvpPP5chwaCbNOLXlEI/
 # END ALLOWED SIGNERS
 EOF
 )

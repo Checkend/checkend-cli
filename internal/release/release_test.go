@@ -8,7 +8,9 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/base64"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -323,5 +325,40 @@ func TestInstallScriptAndNPMTrustTheSameKeys(t *testing.T) {
 	slices.Sort(fromNPM)
 	if !slices.Equal(fromScript, fromNPM) {
 		t.Errorf("install.sh trusts %v, the npm wrapper %v", fromScript, fromNPM)
+	}
+}
+
+// The release keys, pinned by their fingerprints (from Simon's .pub files): a copy error in
+// install.sh or npm/lib/keys.js fails here.
+var releaseKeys = map[string]string{"cli-2026": "SHA256:yoR4iXfhZdJ4v5OaLXX+5/rupH9z93AhZGdas6/AP88"}
+
+func fingerprint(t *testing.T, key string) string {
+	t.Helper()
+	blob, err := base64.StdEncoding.DecodeString(key)
+	if err != nil {
+		t.Fatalf("not base64: %q", key)
+	}
+	sum := sha256.Sum256(blob)
+	return "SHA256:" + base64.RawStdEncoding.EncodeToString(sum[:])
+}
+
+func TestTheReleaseKeysMatchTheirFingerprints(t *testing.T) {
+	script, _ := os.ReadFile(filepath.Join(repoRoot(t), "install.sh"))
+	got := map[string]string{}
+	for _, line := range strings.Split(string(signersBlock.Find(script)), "\n") {
+		if f := strings.Fields(line); len(f) >= 4 && !strings.HasPrefix(f[0], "#") {
+			got[f[0]] = fingerprint(t, f[3])
+		}
+	}
+	if !maps.Equal(got, releaseKeys) {
+		t.Errorf("install.sh trusts %v, want %v", got, releaseKeys)
+	}
+	npm, _ := os.ReadFile(filepath.Join(repoRoot(t), "npm", "lib", "keys.js"))
+	got = map[string]string{}
+	for _, m := range regexp.MustCompile(`id:\s*"([^"]+)",\s*key:\s*"ssh-ed25519 ([A-Za-z0-9+/]+=*)"`).FindAllStringSubmatch(string(npm), -1) {
+		got[m[1]] = fingerprint(t, m[2])
+	}
+	if !maps.Equal(got, releaseKeys) {
+		t.Errorf("npm/lib/keys.js trusts %v, want %v", got, releaseKeys)
 	}
 }

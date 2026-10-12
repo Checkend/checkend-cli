@@ -3,6 +3,8 @@ package serverrelease_test
 import (
 	"crypto/ed25519"
 	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
 	"strings"
 	"testing"
 
@@ -189,5 +191,26 @@ func TestFilesRefusesUnsafeArchives(t *testing.T) {
 		}
 		_, err = r.Files(r.Manifest.Migrations.Asset)
 		failsWith(t, err, "unsafe")
+	}
+}
+
+// The server release key, pinned by its fingerprint (from Simon's .pub file).
+func TestTheTrustedServerKeyMatchesItsFingerprint(t *testing.T) {
+	want := map[string]string{"server-2026": "SHA256:QMPYElbPG0/hSKTHjqjkeaD9ylozLFgf3BFadqoeAzw"}
+	got := map[string]string{}
+	for id, line := range serverrelease.TrustedKeys {
+		f := strings.Fields(line)
+		if len(f) != 2 || f[0] != "ssh-ed25519" {
+			t.Fatalf("%s: %q is not \"ssh-ed25519 <key>\"", id, line)
+		}
+		blob, err := base64.StdEncoding.DecodeString(f[1])
+		if err != nil {
+			t.Fatal(err)
+		}
+		sum := sha256.Sum256(blob)
+		got[id] = "SHA256:" + base64.RawStdEncoding.EncodeToString(sum[:])
+	}
+	if len(got) != len(want) || got["server-2026"] != want["server-2026"] {
+		t.Errorf("TrustedKeys are %v, want %v", got, want)
 	}
 }
