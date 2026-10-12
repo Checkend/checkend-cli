@@ -1,11 +1,13 @@
 package cli_test
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/Checkend/checkend-cli/internal/cli"
 	. "github.com/Checkend/checkend-cli/internal/testkit"
 )
 
@@ -77,7 +79,9 @@ func TestMCPCommandsNameTheRunningBinary(t *testing.T) {
 	_ = os.WriteFile(exe, []byte("x"), 0o755)
 	link := filepath.Join(dir, "path", "ce")
 	_ = os.MkdirAll(filepath.Dir(link), 0o755)
-	_ = os.Symlink(exe, link)
+	if os.Symlink(exe, link) != nil {
+		link = exe // Windows without the symlink privilege: PATH finds this very file
+	}
 	other := filepath.Join(dir, "other", "ce")
 	_ = os.MkdirAll(filepath.Dir(other), 0o755)
 	_ = os.WriteFile(other, []byte("y"), 0o755)
@@ -97,10 +101,31 @@ func TestMCPCommandsNameTheRunningBinary(t *testing.T) {
 		mcp := r.JSON(t)["mcp"].(map[string]any)
 		Equal(t, mcp["claude_code"], "claude mcp add checkend -- "+c.want+" mcp --url "+api.URL)
 		Equal(t, mcp["codex"], "codex mcp add checkend -- "+c.want+" mcp --url "+api.URL)
-		Contains(t, mcp["cursor"].(string), `"command":"`+c.want+`"`)
+		var cursor struct {
+			MCPServers map[string]struct {
+				Command string   `json:"command"`
+				Args    []string `json:"args"`
+			} `json:"mcpServers"`
+		}
+		if err := json.Unmarshal([]byte(mcp["cursor"].(string)), &cursor); err != nil {
+			t.Fatal(err)
+		}
+		Equal(t, cursor.MCPServers["checkend"].Command, c.want)
 		help := cli.Run([]string{"mcp", "--help"})
 		if !strings.Contains(help.Stdout, "claude mcp add checkend -- "+c.want+" mcp --url <url>") {
 			t.Errorf("%s: help:\n%s", name, help.Stdout)
 		}
+	}
+}
+
+func TestTheCEPathIsQuotedForTheShellOfTheSystem(t *testing.T) {
+	for _, c := range []struct{ goos, path, want string }{
+		{"darwin", "/Users/sam/bin/ce", "/Users/sam/bin/ce"},
+		{"darwin", "/Users/sam/my tools/ce", "'/Users/sam/my tools/ce'"},
+		{"linux", "/opt/it's/ce", `'/opt/it'\''s/ce'`},
+		{"windows", `C:\Users\RUNNER~1\bin\ce.exe`, `C:\Users\RUNNER~1\bin\ce.exe`},
+		{"windows", `C:\Program Files\Checkend\ce.exe`, `"C:\Program Files\Checkend\ce.exe"`},
+	} {
+		Equal(t, cli.QuotePath(c.goos, c.path), c.want)
 	}
 }

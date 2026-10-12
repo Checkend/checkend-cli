@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
 	"strings"
 
@@ -132,7 +133,19 @@ func ceCommand(h *host.Host) (shell, path string) {
 			}
 		}
 	}
-	return shellQuote(h.Executable), h.Executable
+	return QuotePath(runtime.GOOS, h.Executable), h.Executable
+}
+
+// QuotePath quotes a program path for the shell of the system: POSIX quotes on macOS and Linux;
+// on Windows, double quotes when the path has a space or a special character of cmd.
+func QuotePath(goos, path string) string {
+	if goos != "windows" {
+		return shellQuote(path)
+	}
+	if strings.ContainsAny(path, " &()^%!;,=") {
+		return `"` + path + `"`
+	}
+	return path
 }
 
 func setupCommand() *Command {
