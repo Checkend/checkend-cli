@@ -1,0 +1,52 @@
+# Release builds of ce. .github/workflows/release.yml runs this when a maintainer pushes a tag
+# (vX.Y.Z). Check it locally: goreleaser check && goreleaser release --snapshot --clean
+version: 2
+project_name: ce
+
+before:
+  hooks:
+    - go mod tidy -diff
+
+builds:
+  - id: ce
+    main: ./cmd/ce
+    binary: ce
+    env:
+      - CGO_ENABLED=0
+    goos: [darwin, linux, windows]
+    goarch: [amd64, arm64]
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+archives:
+  # ce_1.2.3_darwin_arm64.tar.gz (zip on Windows). scripts/homebrew-formula.sh expects these names.
+  - id: archive
+    ids: [ce]
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    name_template: "ce_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+release:
+  github:
+    owner: Checkend
+    name: checkend-cli
+  prerelease: auto
+  footer: |
+    Install: `brew install checkend/tap/checkend`, or download the archive for your system below.
+    checksums.txt has the SHA-256 of each archive.
+
+changelog:
+  use: git
+  sort: asc

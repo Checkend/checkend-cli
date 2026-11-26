@@ -1,0 +1,83 @@
+# Runs when a maintainer pushes a version tag (vX.Y.Z).
+# GoReleaser builds the binaries and publishes the GitHub release with checksums.txt. Then this
+# workflow makes the Homebrew formula from checksums.txt and pushes it to Checkend/homebrew-tap.
+name: Release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write # the GitHub release
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - run: go test ./...
+
+      - uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
+        with:
+          version: v2.18.3
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Make the Homebrew formula
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          scripts/homebrew-formula.sh "${TAG#v}" dist/checksums.txt > "$RUNNER_TEMP/checkend.rb"
+          ruby -c "$RUNNER_TEMP/checkend.rb"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: homebrew-formula
+          path: ${{ runner.temp }}/checkend.rb
+
+      # A prerelease (v1.2.3-rc.1) does not change the tap. The deploy key can write to
+      # Checkend/homebrew-tap only; ssh checks GitHub's pinned host key.
+      - name: Update the Homebrew tap
+        if: ${{ !contains(github.ref_name, '-') }}
+        env:
+          TAP_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set +x
+          if [ -z "$TAP_KEY" ]; then
+            echo "::error::The secret HOMEBREW_TAP_DEPLOY_KEY is missing. Get the formula from the homebrew-formula artifact and push it to Checkend/homebrew-tap by hand."
+            exit 1
+          fi
+          umask 077
+          printf '%s\n' "$TAP_KEY" > "$RUNNER_TEMP/tap-key"
+          printf '%s\n' "github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl" > "$RUNNER_TEMP/github_known_hosts"
+          export GIT_SSH_COMMAND="ssh -i $RUNNER_TEMP/tap-key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$RUNNER_TEMP/github_known_hosts"
+          git clone -q --depth 1 git@github.com:Checkend/homebrew-tap.git "$RUNNER_TEMP/tap"
+          cp "$RUNNER_TEMP/checkend.rb" "$RUNNER_TEMP/tap/Formula/checkend.rb"
+          cd "$RUNNER_TEMP/tap"
+          if git diff --quiet; then echo "The tap has this formula already."; exit 0; fi
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -am "Update ce to ${TAG#v}"
+          git push -q origin HEAD
+          echo "Updated Checkend/homebrew-tap to ${TAG#v}."
+
+      - name: Remove the key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/tap-key"

@@ -7,15 +7,30 @@ event setup, from a terminal. It uses an API token and the same surface as an ag
 ## Install
 
 ```sh
+brew install checkend/tap/checkend
+```
+
+Or download the archive for your system from the
+[releases](https://github.com/Checkend/checkend-cli/releases) (macOS, Linux and Windows; `checksums.txt`
+has the SHA-256 of each archive). Or, with Go:
+
+```sh
 go install github.com/checkend/checkend-cli/cmd/ce@latest
 ```
 
-While this repository is private, Go needs access to it: `export GOPRIVATE=github.com/checkend/*` and a
-GitHub login that can read the repository. Or build from a clone:
+Or build from a clone:
 
 ```sh
 make build        # bin/ce
 ```
+
+## Release
+
+Push a version tag from `main`: `git tag v1.2.3 && git push origin v1.2.3`. The release workflow
+(`.github/workflows/release.yml`) builds the binaries with GoReleaser, publishes the GitHub release and
+updates the formula in `Checkend/homebrew-tap` (secret `HOMEBREW_TAP_DEPLOY_KEY`). A prerelease tag
+(`v1.2.3-rc.1`) does not change the tap. Check the config locally:
+`go run github.com/goreleaser/goreleaser/v2@v2.18.3 release --snapshot --clean`.
 
 ## Log in
 
